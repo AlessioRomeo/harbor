@@ -21,6 +21,8 @@ struct Sidebar: View {
         return List(selection: $model.sidebarSelection) {
             ForEach(model.workspace.groups) { group in
                 Section {
+                    GroupHeader(group: group)
+                        .selectionDisabled()
                     if model.workspace.liveSessions(in: group.id).isEmpty {
                         EmptyGroupRow(groupID: group.id)
                     }
@@ -37,8 +39,6 @@ struct Sidebar: View {
                     .onInsert(of: [SessionDrag.type]) { index, providers in
                         SessionDrag.load(providers) { model.moveSession($0, to: group.id, at: index) }
                     }
-                } header: {
-                    GroupHeader(group: group)
                 }
             }
         }
@@ -70,11 +70,11 @@ private struct GroupHeader: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.quietIndicator)
             .opacity(isHovered ? 1 : 0)
             .help("New session in \(group.name)")
         }
@@ -82,6 +82,8 @@ private struct GroupHeader: View {
         .padding(SidebarMetrics.headerInset)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .onTapGesture { model.showGroupAsGrid(group.id) }
+        .help("Show \(group.name)'s sessions side by side")
         .contextMenu {
             Button("New Session") { model.newSession(in: group.id) }
             Button("Show as Grid") { model.showGroupAsGrid(group.id) }

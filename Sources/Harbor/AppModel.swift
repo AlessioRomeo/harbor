@@ -299,6 +299,8 @@ final class AppModel {
 
     /// The focused pane fills the window; moving the focus shows another pane the same way.
     var isZoomed = false
+    /// In full screen there's no title bar, so panes can start at the very top.
+    var isFullScreen = false
     /// The session being dragged right now, so its own pane offers no place to drop it.
     var draggedSession: UUID?
 
@@ -316,7 +318,7 @@ final class AppModel {
     /// The group's live sessions as an even grid, the focused one keeping the keyboard if it's among them.
     func showGroupAsGrid(_ groupID: UUID) {
         let ids = workspace.liveSessions(in: groupID).map(\.id)
-        guard let grid = PaneLayout.grid(ids) else { return }
+        guard let grid = PaneLayout.grid(ids, aspectRatio: paneAreaAspectRatio) else { return }
         let focus = selectedID.flatMap { grid.contains($0) ? $0 : nil } ?? grid.sessionIDs.first
         isZoomed = false
         update { $0.setLayout(grid, focus: focus) }
@@ -324,6 +326,14 @@ final class AppModel {
             selectedID = focus
         }
         prepareVisibleControllers()
+    }
+
+    /// Roughly the shape of the area the panes fill: the window in front, which is where the
+    /// command came from, without its sidebar.
+    private var paneAreaAspectRatio: Double {
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { return 1.6 }
+        let size = window.contentLayoutRect.size
+        return max(Double(size.width) - 250, 1) / max(Double(size.height), 1)
     }
 
     func showCurrentGroupAsGrid() {

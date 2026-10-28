@@ -10,11 +10,12 @@ struct ContentView: View {
         NavigationSplitView {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             DetailView()
         }
         .frame(minWidth: 720, minHeight: 420)
-        .background(WindowStyler())
+        .background(WindowStyler { model.isFullScreen = $0 })
         .focusedSceneValue(\.archivableSession, model.selectedController?.id)
         .sheet(isPresented: $model.isSwitcherOpen) {
             QuickSwitcher()
@@ -187,21 +188,50 @@ struct MessageView: View {
     }
 }
 
-/// In full screen macOS paints the title bar area with the window's background colour,
-/// which would otherwise be a grey band above the terminal.
+/// In full screen macOS paints the title bar area with the window's background colour, which
+/// would otherwise be a grey band above the terminal. It also tells the model when the window
+/// is in full screen, where there's no title bar to keep clear of.
 private struct WindowStyler: NSViewRepresentable {
+    let onFullScreenChange: (Bool) -> Void
+
     func makeNSView(context: Context) -> NSView {
-        StylingView()
+        StylingView(onFullScreenChange: onFullScreenChange)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class StylingView: NSView {
+        private let onFullScreenChange: (Bool) -> Void
+        private var observers: [NSObjectProtocol] = []
+
+        init(onFullScreenChange: @escaping (Bool) -> Void) {
+            self.onFullScreenChange = onFullScreenChange
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) is not used")
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
             guard let window else { return }
             window.backgroundColor = Theme.terminalBackground
             window.titlebarAppearsTransparent = true
+            DispatchQueue.main.async { [weak self] in self?.reportFullScreen() }
+            let changes = [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification, NSWindow.didResizeNotification]
+            for name in changes {
+                observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.reportFullScreen() }
+                })
+            }
+        }
+
+        private func reportFullScreen() {
+            guard let window else { return }
+            onFullScreenChange(window.styleMask.contains(.fullScreen))
         }
     }
 }

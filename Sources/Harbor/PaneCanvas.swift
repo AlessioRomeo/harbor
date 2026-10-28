@@ -16,7 +16,7 @@ struct PaneCanvas: View {
     var body: some View {
         let isSingle = layout.sessionIDs.count == 1
         GeometryReader { geometry in
-            let top = isSingle ? 0 : Self.headerClearance
+            let top = isSingle || model.isFullScreen ? 0 : Self.headerClearance
             let bounds = CGRect(x: 0, y: top, width: geometry.size.width, height: max(0, geometry.size.height - top))
             let shown = liveRatios.reduce(layout) { $0.settingRatio($1.value, at: $1.key) }
             let zoomed = model.isZoomed ? model.workspace.focusedPane.flatMap { layout.contains($0) ? $0 : nil } : nil
@@ -66,7 +66,7 @@ private struct PaneView: View {
                 TerminalPane(
                     controller: controller,
                     focusRequest: isFocused && model.editingID == nil ? model.terminalFocusRequest : nil,
-                    topInset: isSingle ? 22 : 0
+                    topInset: isSingle && !model.isFullScreen ? 22 : 0
                 )
                 if model.host.state == .connected {
                     ConnectionNotice(controller: controller)

@@ -123,12 +123,21 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
         }
     }
 
-    /// An even grid filled row by row, at most `maxGridPanes` sessions.
-    public static func grid(_ ids: [UUID]) -> PaneLayout? {
+    /// The width-to-height shape a grid aims for in each pane: a little wider than tall suits terminals.
+    public static let preferredPaneAspect = 1.2
+
+    /// An even grid filled row by row, at most `maxGridPanes` sessions, with as many rows as makes
+    /// each pane closest to `preferredPaneAspect` in an area of `aspectRatio` (width / height).
+    public static func grid(_ ids: [UUID], aspectRatio: Double = 1) -> PaneLayout? {
         let ids = Array(ids.prefix(maxGridPanes))
         guard !ids.isEmpty else { return nil }
-        let rowCount = Int(Double(ids.count).squareRoot().rounded(.up))
-        let perRow = Int((Double(ids.count) / Double(rowCount)).rounded(.up))
+        let count = ids.count
+        let mismatch = { (rows: Int) -> Double in
+            let columns = (Double(count) / Double(rows)).rounded(.up)
+            return abs(log((aspectRatio / columns * Double(rows)) / preferredPaneAspect))
+        }
+        let rowCount = (1...count).min { mismatch($0) < mismatch($1) } ?? 1
+        let perRow = Int((Double(count) / Double(rowCount)).rounded(.up))
         let rows = stride(from: 0, to: ids.count, by: perRow).map { Array(ids[$0..<min($0 + perRow, ids.count)]) }
         return evenChain(rows.compactMap { evenChain($0.map(PaneLayout.pane), axis: .horizontal) }, axis: .vertical)
     }

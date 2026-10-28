@@ -88,6 +88,18 @@ struct PaneLayoutTests {
         #expect(shape(7) == [3, 3, 1])
     }
 
+    @Test func wideAreasGetMoreColumns() {
+        func rows(_ count: Int, aspect: Double) -> Int {
+            let ids = (0..<count).map { _ in UUID() }
+            let frames = PaneLayout.grid(ids, aspectRatio: aspect)!.frames(in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            return Set(ids.map { (frames[$0]!.minY * 1000).rounded() }).count
+        }
+        #expect(rows(2, aspect: 1.6) == 1)
+        #expect(rows(3, aspect: 2.2) == 1)
+        #expect(rows(4, aspect: 1.6) == 2)
+        #expect(rows(2, aspect: 0.8) == 2)
+    }
+
     @Test func gridPanesShareARowEvenly() {
         let ids = [a, b, c]
         let frames = PaneLayout.grid(ids)!.frames(in: CGRect(x: 0, y: 0, width: 300, height: 200))
