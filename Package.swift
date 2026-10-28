@@ -14,6 +14,11 @@ let package = Package(
             dependencies: ["HarborCore", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
         .executableTarget(name: "harbor-host", dependencies: ["HarborCore", "HarborHost"]),
+        .executableTarget(
+            name: "Harbor",
+            dependencies: ["HarborCore", .product(name: "SwiftTerm", package: "SwiftTerm")],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
         .testTarget(name: "HarborCoreTests", dependencies: ["HarborCore"]),
         .testTarget(name: "HarborHostTests", dependencies: ["HarborCore", "HarborHost"]),
     ]

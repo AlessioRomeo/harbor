@@ -38,6 +38,20 @@ public struct TerminalSize: Codable, Sendable, Equatable {
     }
 }
 
+extension Frame {
+    public static func resize(_ size: TerminalSize) -> Frame {
+        Frame(.resize, payload: [UInt8(size.cols >> 8), UInt8(size.cols & 0xFF), UInt8(size.rows >> 8), UInt8(size.rows & 0xFF)])
+    }
+
+    public var terminalSize: TerminalSize? {
+        guard type == .resize, payload.count == 4 else { return nil }
+        return TerminalSize(
+            cols: UInt16(payload[0]) << 8 | UInt16(payload[1]),
+            rows: UInt16(payload[2]) << 8 | UInt16(payload[3])
+        )
+    }
+}
+
 public enum HostRequest: Codable, Sendable, Equatable {
     case create(id: UUID, size: TerminalSize)
     case kill(id: UUID, saveOutput: Bool)

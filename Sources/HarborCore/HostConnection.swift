@@ -6,8 +6,8 @@ public enum HostConnectionError: Error, Equatable {
     case unexpectedFrame(FrameType)
 }
 
-/// A blocking connection to the session host. Use it from one thread at a time.
-public final class HostConnection {
+/// A blocking connection to the session host. Safe with one thread sending and one receiving.
+public final class HostConnection: @unchecked Sendable {
     private let fd: Int32
     private var decoder = FrameDecoder()
     private var isClosed = false
@@ -33,7 +33,7 @@ public final class HostConnection {
     }
 
     deinit {
-        close()
+        Darwin.close(fd)
     }
 
     public func send(_ frame: Frame) throws {
@@ -56,9 +56,26 @@ public final class HostConnection {
         }
     }
 
+    /// Receives on a dedicated thread until the connection ends, which is reported once as the error.
+    public func startReceiving(_ handler: @escaping @Sendable (Result<Frame, any Error>) -> Void) {
+        let thread = Thread { [self] in
+            while true {
+                do {
+                    handler(.success(try receive()))
+                } catch {
+                    handler(.failure(error))
+                    return
+                }
+            }
+        }
+        thread.name = "Harbor host connection"
+        thread.start()
+    }
+
+    /// Ends the connection and wakes a blocked receiver; the descriptor closes when the last user lets go.
     public func close() {
         guard !isClosed else { return }
         isClosed = true
-        Darwin.close(fd)
+        Darwin.shutdown(fd, SHUT_RDWR)
     }
 }

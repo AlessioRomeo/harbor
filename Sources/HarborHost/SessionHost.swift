@@ -110,7 +110,11 @@ public final class SessionHost: @unchecked Sendable {
             case (.attached(let id), .input):
                 sessions[id]?.send(frame.payload)
             case (.attached(let id), .resize):
-                sessions[id]?.resize(to: try frame.decode(TerminalSize.self))
+                guard let size = frame.terminalSize else {
+                    client.fail("Malformed resize frame")
+                    return
+                }
+                sessions[id]?.resize(to: size)
             default:
                 client.fail("Unexpected \(frame.type) frame")
             }

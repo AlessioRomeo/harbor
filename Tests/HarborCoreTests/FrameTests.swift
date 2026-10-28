@@ -41,4 +41,10 @@ struct FrameTests {
         let request = HostRequest.kill(id: UUID(), saveOutput: true)
         #expect(try Frame.json(.request, request).decode(HostRequest.self) == request)
     }
+
+    @Test func resizeFramesCarryTheSize() {
+        let size = TerminalSize(cols: 300, rows: 72)
+        #expect(Frame.resize(size).terminalSize == size)
+        #expect(Frame(.resize, payload: [1, 2, 3]).terminalSize == nil)
+    }
 }
