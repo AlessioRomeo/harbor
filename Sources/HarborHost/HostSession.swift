@@ -1,0 +1,95 @@
+import Darwin
+import Foundation
+import HarborCore
+import SwiftTerm
+
+/// One shell on its pseudo-terminal, with its output history and the client attached to it, if any.
+final class HostSession: LocalProcessDelegate, @unchecked Sendable {
+    let id: UUID
+    private(set) var history = OutputHistory()
+    private(set) var exitCode: Int32?
+    private(set) var hasExited = false
+    var attached: ClientConnection?
+    var size: TerminalSize
+    var isBeingKilled = false
+    private var process: LocalProcess!
+    private let onExit: (HostSession) -> Void
+
+    init(id: UUID, size: TerminalSize, queue: DispatchQueue, onExit: @escaping (HostSession) -> Void) {
+        self.id = id
+        self.size = size
+        self.onExit = onExit
+        process = LocalProcess(delegate: self, dispatchQueue: queue)
+    }
+
+    func start(with launcher: ShellLauncher) {
+        process.startProcess(
+            executable: launcher.executable,
+            args: [],
+            environment: launcher.environment(for: id),
+            execName: launcher.loginName,
+            currentDirectory: launcher.directory
+        )
+    }
+
+    var activity: SessionActivity {
+        if hasExited { return .ended(exitCode: exitCode) }
+        let shell = process.shellPid
+        let foreground = tcgetpgrp(process.childfd)
+        return shell > 0 && foreground > 0 && foreground != shell ? .busy : .idle
+    }
+
+    func send(_ input: [UInt8]) {
+        process.send(data: input[...])
+    }
+
+    func resize(to newSize: TerminalSize) {
+        size = newSize
+        var windowSize = winsize(ws_row: newSize.rows, ws_col: newSize.cols, ws_xpixel: 0, ws_ypixel: 0)
+        process.updateWindowSize(&windowSize)
+    }
+
+    func clearHistory() {
+        history.clear()
+    }
+
+    /// Interactive shells ignore SIGTERM, so hang up the shell's process group and the
+    /// foreground job; `forceKill` finishes off anything that survived the hangup.
+    func hangUp() {
+        signalProcessGroups(SIGHUP)
+    }
+
+    func forceKill() {
+        signalProcessGroups(SIGKILL)
+    }
+
+    private func signalProcessGroups(_ signal: Int32) {
+        let shell = process.shellPid
+        guard shell > 0 else { return }
+        let foreground = tcgetpgrp(process.childfd)
+        if foreground > 0, foreground != shell {
+            killpg(foreground, signal)
+        }
+        killpg(shell, signal)
+    }
+
+    func dataReceived(slice: ArraySlice<UInt8>) {
+        history.append(slice)
+        attached?.send(Frame(.output, payload: Array(slice)))
+    }
+
+    func processTerminated(_ source: LocalProcess, exitCode: Int32?) {
+        hasExited = true
+        self.exitCode = exitCode
+        onExit(self)
+    }
+
+    func processFailedToStart(_ source: LocalProcess, error: LocalProcessError) {
+        dataReceived(slice: Array("\r\nHarbor could not start the shell: \(error)\r\n".utf8)[...])
+        processTerminated(source, exitCode: nil)
+    }
+
+    func getWindowSize() -> winsize {
+        winsize(ws_row: size.rows, ws_col: size.cols, ws_xpixel: 0, ws_ypixel: 0)
+    }
+}
