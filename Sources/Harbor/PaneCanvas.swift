@@ -186,10 +186,34 @@ private struct PaneHeader: View {
         .contentShape(Rectangle())
         .onTapGesture { model.selectedID = id }
         .onHover { isHovered = $0 }
+        .background(WindowHeldStill(isHeld: isHovered))
         .onDrag {
             model.draggedSession = id
             return SessionDrag.provider(for: id)
         }
+    }
+}
+
+/// Headers in the top row sit in the title bar strip, where pressing the mouse would start
+/// moving the window and drag it along with the pane. The window stays put while the pointer
+/// is over a header.
+private struct WindowHeldStill: NSViewRepresentable {
+    let isHeld: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        PassThroughView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        view.window?.isMovable = !isHeld
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: ()) {
+        view.window?.isMovable = true
+    }
+
+    private final class PassThroughView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 
