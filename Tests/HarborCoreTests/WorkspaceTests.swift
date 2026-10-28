@@ -5,9 +5,10 @@ import Testing
 struct WorkspaceTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    @Test func startsWithOneGroupAndOneSession() {
+    @Test func startsWithGeneralAndOneSession() {
         let workspace = Workspace.initial(now: now)
-        #expect(workspace.groups.map(\.name) == ["Me"])
+        #expect(workspace.groups.map(\.name) == ["General"])
+        #expect(workspace.groups.first?.id == Workspace.generalGroupID)
         #expect(workspace.sessions.map(\.name) == ["Shell"])
         #expect(workspace.sessions.first?.groupID == workspace.groups.first?.id)
     }
@@ -49,6 +50,15 @@ struct WorkspaceTests {
         #expect(workspace.liveSessions(in: me).map(\.name) == ["b"])
 
         #expect(throws: WorkspaceError.unknownGroup) { try workspace.moveSession(a, to: UUID()) }
+    }
+
+    @Test func keepsGeneral() throws {
+        var workspace = Workspace()
+        workspace.addGroup(named: "Me")
+        workspace.ensureGeneralGroup()
+        workspace.ensureGeneralGroup()
+        #expect(workspace.groups.map(\.name) == ["General", "Me"])
+        #expect(throws: WorkspaceError.generalGroupStays) { try workspace.deleteGroup(Workspace.generalGroupID) }
     }
 
     @Test func deletesOnlyGroupsWithoutLiveSessions() throws {

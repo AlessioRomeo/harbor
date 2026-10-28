@@ -20,6 +20,7 @@ public struct Session: Codable, Equatable, Identifiable, Sendable {
 
 public enum WorkspaceError: Error, Equatable {
     case groupNotEmpty
+    case generalGroupStays
     case unknownGroup
     case unknownSession
 }
@@ -27,7 +28,9 @@ public enum WorkspaceError: Error, Equatable {
 /// Groups and sessions in display order. Sessions keep their place in `sessions`,
 /// so a group's order is the order of its sessions in that array.
 public struct Workspace: Codable, Equatable, Sendable {
-    public static let defaultGroupName = "Me"
+    /// The group that is always there: new sessions without a group of their own go here.
+    public static let generalGroupID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+    public static let generalGroupName = "General"
     public static let defaultSessionName = "Shell"
 
     public private(set) var groups: [SessionGroup]
@@ -44,9 +47,15 @@ public struct Workspace: Codable, Equatable, Sendable {
 
     public static func initial(now: Date = Date()) -> Workspace {
         var workspace = Workspace()
-        let group = workspace.addGroup(named: defaultGroupName)
-        workspace.insertSession(named: defaultSessionName, in: group, now: now)
+        workspace.ensureGeneralGroup()
+        workspace.insertSession(named: defaultSessionName, in: generalGroupID, now: now)
         return workspace
+    }
+
+    /// Puts General back at the top if it's missing, as in files from before it existed.
+    public mutating func ensureGeneralGroup() {
+        guard !groups.contains(where: { $0.id == Self.generalGroupID }) else { return }
+        groups.insert(SessionGroup(id: Self.generalGroupID, name: Self.generalGroupName), at: 0)
     }
 
     public func session(_ id: UUID) -> Session? {
@@ -81,9 +90,11 @@ public struct Workspace: Codable, Equatable, Sendable {
         groups.insert(groups.remove(at: index), at: target)
     }
 
-    /// Only a group without live sessions can go; its archived sessions return to the first group when restored.
+    /// Only a group without live sessions can go, and never General; archived sessions of a deleted
+    /// group return to General when restored.
     public mutating func deleteGroup(_ id: UUID) throws {
         guard groups.contains(where: { $0.id == id }) else { throw WorkspaceError.unknownGroup }
+        guard id != Self.generalGroupID else { throw WorkspaceError.generalGroupStays }
         guard liveSessions(in: id).isEmpty else { throw WorkspaceError.groupNotEmpty }
         groups.removeAll { $0.id == id }
     }
@@ -173,12 +184,13 @@ public struct Workspace: Codable, Equatable, Sendable {
         setLayout(layout)
     }
 
-    /// Brings a session back at the end of its group, or of the first group if its own is gone.
+    /// Brings a session back at the end of its group, or of General if its own is gone.
     public mutating func restore(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }), sessions[index].isArchived else { return }
         var session = sessions.remove(at: index)
         if !groups.contains(where: { $0.id == session.groupID }) {
-            session.groupID = groups.first?.id ?? addGroup(named: Self.defaultGroupName)
+            ensureGeneralGroup()
+            session.groupID = Self.generalGroupID
         }
         session.archivedAt = nil
         session.lastActivityAt = date

@@ -47,7 +47,7 @@ struct HarborCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Session") { model.newSession() }
+            Button("New Session") { model.newSession(in: model.currentGroupID) }
                 .keyboardShortcut("t")
             Button("New Group") { model.newGroup() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])

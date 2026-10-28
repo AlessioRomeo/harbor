@@ -57,10 +57,31 @@ private enum SidebarMetrics {
 private struct GroupHeader: View {
     @Environment(AppModel.self) private var model
     let group: SessionGroup
+    @State private var isHovered = false
+
     var body: some View {
-        RenamableText(id: group.id, name: group.name)
-            .font(.subheadline.weight(.semibold))
-            .padding(SidebarMetrics.headerInset)
+        HStack(spacing: 6) {
+            RenamableText(id: group.id, name: group.name)
+                .textCase(.uppercase)
+                .tracking(0.6)
+            Spacer(minLength: 4)
+            Button {
+                model.newSession(in: group.id)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .opacity(isHovered ? 1 : 0)
+            .help("New session in \(group.name)")
+        }
+        .font(.caption.weight(.semibold))
+        .padding(SidebarMetrics.headerInset)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
         .contextMenu {
             Button("New Session") { model.newSession(in: group.id) }
             Button("Show as Grid") { model.showGroupAsGrid(group.id) }
@@ -73,7 +94,7 @@ private struct GroupHeader: View {
                 .disabled(model.workspace.groups.last?.id == group.id)
             Divider()
             Button("Delete Group") { model.deleteGroup(group.id) }
-                .disabled(!model.workspace.liveSessions(in: group.id).isEmpty)
+                .disabled(group.id == Workspace.generalGroupID || !model.workspace.liveSessions(in: group.id).isEmpty)
         }
     }
 }
@@ -136,20 +157,12 @@ private struct SidebarFooter: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Group {
-                Button {
-                    model.newSession()
-                } label: {
-                    Label("New Session", systemImage: "plus")
-                }
-                .help("New session (⌘T)")
-                Button {
-                    model.newGroup()
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                }
-                .help("New group (⇧⌘N)")
+            Button {
+                model.newSession()
+            } label: {
+                Label("New Session", systemImage: "plus")
             }
+            .help("New session in General")
             .opacity(model.isShowingArchive ? 0 : 1)
             .disabled(model.isShowingArchive)
             Spacer()
@@ -167,6 +180,14 @@ private struct SidebarFooter: View {
                 }
                 .help(model.isShowingArchive ? "Back to sessions" : "Archived sessions")
             }
+            Button {
+                model.newGroup()
+            } label: {
+                Image(systemName: "folder.badge.plus")
+            }
+            .help("New group (⇧⌘N)")
+            .opacity(model.isShowingArchive ? 0 : 1)
+            .disabled(model.isShowingArchive)
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
@@ -262,19 +283,59 @@ private struct RenamableText: View {
 private struct RenamePopover: View {
     let name: String
     let onSave: (String) -> Void
-    @State private var draft = ""
-    @FocusState private var isFocused: Bool
 
     var body: some View {
-        TextField("Name", text: $draft)
-            .textFieldStyle(.roundedBorder)
+        NameField(initialText: name, onSubmit: onSave)
             .frame(width: 220)
-            .focused($isFocused)
-            .onSubmit { onSave(draft) }
             .padding(12)
-            .onAppear {
-                draft = name
-                DispatchQueue.main.async { isFocused = true }
+    }
+}
+
+/// A text field that takes the keyboard as soon as its popover opens. A SwiftUI field doesn't
+/// reliably do that while a terminal in the main window holds the keyboard.
+private struct NameField: NSViewRepresentable {
+    let initialText: String
+    let onSubmit: (String) -> Void
+
+    func makeNSView(context: Context) -> FocusingTextField {
+        let field = FocusingTextField(string: initialText)
+        field.bezelStyle = .roundedBezel
+        field.focusRingType = .default
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.submit(_:))
+        return field
+    }
+
+    func updateNSView(_ field: FocusingTextField, context: Context) {
+        context.coordinator.onSubmit = onSubmit
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onSubmit: onSubmit)
+    }
+
+    final class Coordinator: NSObject {
+        var onSubmit: (String) -> Void
+
+        init(onSubmit: @escaping (String) -> Void) {
+            self.onSubmit = onSubmit
+        }
+
+        @objc func submit(_ sender: NSTextField) {
+            onSubmit(sender.stringValue)
+        }
+    }
+
+    final class FocusingTextField: NSTextField {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                window.makeKey()
+                window.makeFirstResponder(self)
+                self.currentEditor()?.selectAll(nil)
             }
+        }
     }
 }

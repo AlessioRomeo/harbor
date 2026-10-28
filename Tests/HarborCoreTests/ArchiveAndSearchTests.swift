@@ -23,26 +23,16 @@ struct ArchiveTests {
         #expect(workspace.archivedSessions.isEmpty)
     }
 
-    @Test func restoresIntoTheFirstGroupWhenItsOwnIsGone() throws {
+    @Test func restoresIntoGeneralWhenItsOwnGroupIsGone() throws {
         var workspace = Workspace()
-        let me = workspace.addGroup(named: "Me")
+        workspace.addGroup(named: "Me")
         let old = workspace.addGroup(named: "Old")
         let id = try workspace.addSession(named: "a", to: old, now: now)
         workspace.archive(id, at: now)
         try workspace.deleteGroup(old)
         workspace.restore(id, at: now)
-        #expect(workspace.session(id)?.groupID == me)
-    }
-
-    @Test func restoresIntoANewGroupWhenThereAreNone() throws {
-        var workspace = Workspace()
-        let only = workspace.addGroup(named: "Only")
-        let id = try workspace.addSession(named: "a", to: only, now: now)
-        workspace.archive(id, at: now)
-        try workspace.deleteGroup(only)
-        workspace.restore(id, at: now)
-        #expect(workspace.groups.map(\.name) == ["Me"])
-        #expect(workspace.session(id)?.groupID == workspace.groups.first?.id)
+        #expect(workspace.session(id)?.groupID == Workspace.generalGroupID)
+        #expect(workspace.groups.map(\.name) == ["General", "Me"])
     }
 
     @Test func listsTheMostRecentlyArchivedFirst() throws {

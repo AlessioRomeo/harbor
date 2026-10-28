@@ -103,7 +103,10 @@ final class AppModel {
             storageError = "Harbor couldn't read its sessions file (\(host.paths.workspace.path)): \(error.localizedDescription). Nothing will be saved until it's fixed or moved away."
             return
         }
-        update { $0.pruneLayout() }
+        update {
+            $0.ensureGeneralGroup()
+            $0.pruneLayout()
+        }
         let stored = UserDefaults.standard.string(forKey: Self.selectionKey)
             .flatMap(UUID.init(uuidString:))
             .flatMap { workspace.session($0) }
@@ -427,11 +430,12 @@ final class AppModel {
     // MARK: Groups and sessions
 
     var currentGroupID: UUID? {
-        selectedID.flatMap { workspace.session($0) }.map(\.groupID) ?? workspace.groups.first?.id
+        selectedID.flatMap { workspace.session($0) }.map(\.groupID) ?? Workspace.generalGroupID
     }
 
     func newSession(in groupID: UUID? = nil) {
-        let group = groupID ?? currentGroupID ?? update { $0.addGroup(named: Workspace.defaultGroupName) }
+        update { $0.ensureGeneralGroup() }
+        let group = groupID ?? Workspace.generalGroupID
         var created: UUID?
         attempt { created = try $0.addSession(named: Self.newSessionName, to: group) }
         guard let created else { return }
@@ -439,8 +443,10 @@ final class AppModel {
         editingID = created
     }
 
+    /// The name popover opens once the new title is on screen; asked for at once, it never shows.
     func newGroup() {
-        editingID = update { $0.addGroup(named: "New group") }
+        let id = update { $0.addGroup(named: "New group") }
+        DispatchQueue.main.async { [weak self] in self?.editingID = id }
     }
 
     func rename(_ id: UUID, to name: String) {
