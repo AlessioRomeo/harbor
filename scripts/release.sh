@@ -7,7 +7,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 cd "$(dirname "$0")/.."
 version="${1:?usage: release.sh <version>}"
 
-HARBOR_VERSION="$version" ./scripts/bundle-app.sh --arch arm64 --arch x86_64
+HARBOR_VERSION="$version" ./scripts/bundle-app.sh arm64 x86_64
 
 dmg="build/Harbor.dmg"
 contents="build/dmg"
