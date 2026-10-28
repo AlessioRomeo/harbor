@@ -34,7 +34,8 @@ final class AppModel {
     /// Bumped whenever the selected terminal should take the keyboard.
     private(set) var terminalFocusRequest = 0
     /// The session with the keyboard: the focused pane, or an archived session being looked at.
-    /// Selecting a live session that isn't on screen puts it in the focused pane's place.
+    /// Selecting a live session that isn't on screen puts it in the focused pane's place, or shows
+    /// it alone when it belongs to another group.
     var selectedID: UUID? {
         didSet {
             if selectedID == nil, oldValue != nil, let focused = workspace.focusedPane {
@@ -270,7 +271,8 @@ final class AppModel {
         update { workspace in
             if workspace.layout?.contains(id) == true {
                 workspace.focusPane(id)
-            } else if let layout = workspace.layout, let focused = workspace.focusedPane {
+            } else if let layout = workspace.layout, let focused = workspace.focusedPane,
+                      workspace.session(focused)?.groupID == session.groupID {
                 workspace.setLayout(layout.replacing(focused, with: id), focus: id)
             } else {
                 workspace.setLayout(.pane(id), focus: id)
