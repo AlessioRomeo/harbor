@@ -27,14 +27,20 @@ public struct SelectionEdit: Equatable, Sendable {
     /// The selected characters, as indices into the row.
     public var range: Range<Int>
 
-    /// Finds `selected` in the row; with several matches, the one nearest `hintColumn`.
-    public init?(selected: String, in row: Row, hintColumn: Int) {
+    /// Finds `selected` in the row; with several matches, the one nearest `hintColumn`. Nil when the
+    /// selection lies beyond blank cells right of the cursor, such as zsh's right-hand prompt: the
+    /// line being typed ends before it, so the arrows would stop short and delete the wrong text.
+    public init?(selected: String, in row: Row, hintColumn: Int, cursorColumn: Int) {
         let needle = selected.map(String.init)
         guard !needle.isEmpty, !selected.contains(where: \.isNewline), needle.count <= row.characters.count else { return nil }
         let starts = (0...(row.characters.count - needle.count)).filter { Array(row.characters[$0..<($0 + needle.count)]) == needle }
         let hint = row.characterIndex(atColumn: hintColumn)
         let distance = { (start: Int) in start > hint ? start - hint : max(0, hint - (start + needle.count - 1)) }
         guard let start = starts.min(by: { distance($0) < distance($1) }) else { return nil }
+        let cursor = row.characterIndex(atColumn: cursorColumn)
+        if start > cursor {
+            guard !row.characters[cursor..<start].joined().contains("  ") else { return nil }
+        }
         range = start..<(start + needle.count)
     }
 

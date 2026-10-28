@@ -166,13 +166,16 @@ final class HarborTerminalView: TerminalView {
         super.mouseDown(with: event)
     }
 
-    /// The screen cell under a point, assuming the view shows the live screen rather than scrollback.
+    /// The cell under a point, measured the way SwiftTerm lays out rows: from the top, with any
+    /// leftover height at the bottom belonging to no row.
     private func cell(at point: NSPoint) -> (column: Int, row: Int)? {
-        guard let dimensions = terminalInputStateSnapshot()?.dimensions, dimensions.cols > 0, dimensions.rows > 0,
-              bounds.width > 0, bounds.height > 0 else { return nil }
-        let cellHeight = bounds.height / CGFloat(dimensions.rows)
-        let y = isFlipped ? point.y : bounds.height - point.y
-        return (Int(point.x / (bounds.width / CGFloat(dimensions.cols))), Int(y / cellHeight))
+        guard let dimensions = terminalInputStateSnapshot()?.dimensions, dimensions.cols > 0, dimensions.rows > 0 else { return nil }
+        let grid = getOptimalFrameSize()
+        let cellHeight = grid.height / CGFloat(dimensions.rows)
+        let cellWidth = grid.width / CGFloat(dimensions.cols)
+        let fromTop = isFlipped ? point.y : bounds.height - point.y
+        guard cellHeight > 0, cellWidth > 0, fromTop >= 0, fromTop < grid.height else { return nil }
+        return (Int(point.x / cellWidth), Int(fromTop / cellHeight))
     }
 
     /// Replaces a selection inside the line being typed by pressing the keys a person would.
@@ -197,8 +200,13 @@ final class HarborTerminalView: TerminalView {
         return super.validateUserInterfaceItem(item)
     }
 
+    /// Scrolled back, the rows on screen are old output, not the rows the cursor counts in.
+    private var isShowingLiveScreen: Bool {
+        !canScroll || scrollPosition >= 1
+    }
+
     private func editableSelection() -> (SelectionEdit, SelectionEdit.Row, Int)? {
-        guard selectionActive, let selected = getSelection(), let mouseDownCell else { return nil }
+        guard selectionActive, isShowingLiveScreen, let selected = getSelection(), let mouseDownCell else { return nil }
         let state = terminalStateSnapshot()
         guard mouseDownCell.row == state.cursor.row else { return nil }
         guard let line = state.visibleRows.first(where: { $0.row == state.cursor.row }) else { return nil }
@@ -206,7 +214,7 @@ final class HarborTerminalView: TerminalView {
         let widths = line.cellWidths.filter { $0 > 0 }
         guard characters.count <= widths.count else { return nil }
         let row = SelectionEdit.Row(characters: characters, cellWidths: Array(widths.prefix(characters.count)))
-        guard let edit = SelectionEdit(selected: selected, in: row, hintColumn: mouseDownCell.column) else { return nil }
+        guard let edit = SelectionEdit(selected: selected, in: row, hintColumn: mouseDownCell.column, cursorColumn: state.cursor.col) else { return nil }
         return (edit, row, state.cursor.col)
     }
 }
@@ -220,7 +228,8 @@ enum SelectionEditing {
     static func install() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard let view = NSApp.keyWindow?.firstResponder as? HarborTerminalView, view.selectionActive,
-                  event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
+                  event.modifierFlags.isDisjoint(with: [.command, .control]),
+                  !event.modifierFlags.contains(.option) || !view.optionAsMetaKey else { return event }
             if deleteKeys.contains(event.keyCode) {
                 return view.replaceSelection(with: "") ? nil : event
             }
