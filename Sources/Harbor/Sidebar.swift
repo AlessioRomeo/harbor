@@ -80,6 +80,9 @@ private struct GroupHeader: View {
             RenamableText(id: group.id, name: group.name)
                 .textCase(.uppercase)
                 .tracking(0.6)
+                .contentShape(Rectangle())
+                .onTapGesture { model.showGroupAsGrid(group.id) }
+                .help("Show \(group.name)'s sessions side by side")
             if isCollapsed, model.groupNeedsAttention(group.id) {
                 Circle()
                     .fill(Theme.attention)
@@ -104,8 +107,9 @@ private struct GroupHeader: View {
         .padding(SidebarMetrics.groupHeaderInset)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture { model.showGroupAsGrid(group.id) }
-        .help("Show \(group.name)'s sessions side by side")
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) { model.toggleCollapsed(group.id) }
+        }
         .contextMenu {
             Button("New Session") { model.newSession(in: group.id) }
             Button("Show as Grid") { model.showGroupAsGrid(group.id) }
