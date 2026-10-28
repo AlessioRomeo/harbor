@@ -177,12 +177,7 @@ private struct SidebarFooter: View {
                 Button {
                     model.isShowingArchive.toggle()
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: model.isShowingArchive ? "archivebox.fill" : "archivebox")
-                        if archived > 0 {
-                            Text("\(archived)").monospacedDigit()
-                        }
-                    }
+                    Image(systemName: model.isShowingArchive ? "archivebox.fill" : "archivebox")
                 }
                 .help(model.isShowingArchive ? "Back to sessions" : "Archived sessions")
             }
