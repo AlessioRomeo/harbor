@@ -10,7 +10,9 @@ public struct ShellLauncher: Sendable {
     public static let sessionIDVariable = "HARBOR_SESSION_ID"
 
     private static let appOnlyVariables: Set<String> = ["__CFBundleIdentifier", "TERM_SESSION_ID", "SHELL_SESSION_ID", HarborPaths.dataDirectoryVariable]
-    private static let appOnlyPrefixes = ["XPC_", "__CF"]
+    /// Also everything a Claude Code session exports: started from inside one, Harbor would pass
+    /// them on, and every claude in a Harbor shell would think it is a child session.
+    private static let appOnlyPrefixes = ["XPC_", "__CF", "CLAUDE", "AI_AGENT"]
 
     public var executable: String
     public var loginName: String
