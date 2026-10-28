@@ -361,7 +361,12 @@ final class AppModel {
         workspace.liveSessions(in: groupID).contains { indicator(of: $0.id).needsAttention }
     }
     /// The session being dragged right now, so its own pane offers no place to drop it.
-    var draggedSession: UUID?
+    var draggedSession: UUID? {
+        didSet { dropPreview = nil }
+    }
+    /// The one pane showing where the dragged session would land. Kept here rather than in each
+    /// pane, so a pane that never hears the drag leave can't keep its highlight.
+    var dropPreview: PanePlacement?
 
     func toggleZoom() {
         isZoomed = arePanesShown && paneCount > 1 && !isZoomed

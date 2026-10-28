@@ -51,8 +51,10 @@ private struct PaneView: View {
     let controller: TerminalController
     let isSingle: Bool
     let size: CGSize
-    @State private var drop: PaneDrop?
 
+    private var drop: PaneDrop? {
+        model.dropPreview.flatMap { $0.pane == controller.id ? $0.drop : nil }
+    }
     private var isFocused: Bool { model.selectedID == controller.id }
     private var needsAttention: Bool { model.indicator(of: controller.id).needsAttention }
 
@@ -97,15 +99,19 @@ private struct PaneView: View {
                     .animation(.easeOut(duration: 0.12), value: drop)
             }
         }
-        .onDrop(of: [SessionDrag.type], delegate: PaneDropDelegate(target: controller.id, size: size, drop: $drop, model: model))
+        .onDrop(of: [SessionDrag.type], delegate: PaneDropDelegate(target: controller.id, size: size, model: model))
     }
+}
+
+struct PanePlacement: Equatable {
+    let pane: UUID
+    let drop: PaneDrop
 }
 
 /// Sessions dragged from the sidebar or by a pane's header land beside this pane or in its place.
 private struct PaneDropDelegate: DropDelegate {
     let target: UUID
     let size: CGSize
-    @Binding var drop: PaneDrop?
     let model: AppModel
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -115,21 +121,24 @@ private struct PaneDropDelegate: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? {
         let placement = PaneDrop(at: info.location, in: size)
         guard changesLayout(placement) else {
-            drop = nil
+            clearPreview()
             return DropProposal(operation: .forbidden)
         }
-        drop = placement
+        model.dropPreview = PanePlacement(pane: target, drop: placement)
         return DropProposal(operation: .move)
     }
 
     func dropExited(info: DropInfo) {
-        drop = nil
+        clearPreview()
     }
 
+    /// The drag is over once dropped, so updates SwiftUI still sends to the panes that moved under
+    /// the pointer find no dragged session and show nothing.
     func performDrop(info: DropInfo) -> Bool {
         let placement = PaneDrop(at: info.location, in: size)
-        drop = nil
-        guard changesLayout(placement) else { return false }
+        let accepted = changesLayout(placement)
+        model.draggedSession = nil
+        guard accepted else { return false }
         let providers = info.itemProviders(for: [SessionDrag.type])
         guard !providers.isEmpty else { return false }
         let target = target
@@ -140,8 +149,14 @@ private struct PaneDropDelegate: DropDelegate {
 
     /// A drop that would leave the layout as it is gets no highlight and isn't accepted.
     private func changesLayout(_ placement: PaneDrop) -> Bool {
-        guard let dragged = model.draggedSession else { return true }
+        guard let dragged = model.draggedSession else { return false }
         return model.placementChangesLayout(dragged, at: placement, of: target)
+    }
+
+    private func clearPreview() {
+        if model.dropPreview?.pane == target {
+            model.dropPreview = nil
+        }
     }
 }
 
