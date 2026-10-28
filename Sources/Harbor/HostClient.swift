@@ -43,7 +43,7 @@ final class HostClient {
                 DispatchQueue.main.async { self?.received(result, on: connection) }
             }
         case .failure(let failure as Failure):
-            state = .failed("The running session host is from another version of Harbor (\(failure.message)). Quit Harbor and run `pkill harbor-host` to restart it; this ends running sessions.")
+            state = .failed("The running session host is from another version of Harbor (\(failure.message)). Quit Harbor, then run `pkill harbor-host`. This ends running sessions.")
         case .failure(let error):
             state = .failed(error.localizedDescription)
         }
@@ -69,7 +69,8 @@ final class HostClient {
         case .failure(let error):
             self.connection = nil
             hasReceivedSessions = false
-            state = .failed("Lost the session host: \(error)")
+            Self.logger.error("Lost the session host: \(String(describing: error))")
+            state = .failed("The session host stopped. Reconnecting starts it again, and sessions come back with their output.")
         }
     }
 
@@ -78,7 +79,8 @@ final class HostClient {
         do {
             try connection.send(request)
         } catch {
-            state = .failed("Lost the session host: \(error)")
+            Self.logger.error("Could not reach the session host: \(String(describing: error))")
+            state = .failed("The session host stopped. Reconnecting starts it again, and sessions come back with their output.")
         }
     }
 }

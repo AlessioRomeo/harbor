@@ -33,6 +33,12 @@ struct HarborCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Session") { model.newSession() }
+                .keyboardShortcut("t")
+            Button("New Group") { model.newGroup() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+        }
         CommandGroup(replacing: .printItem) {}
         CommandGroup(after: .pasteboard) {
             Divider()

@@ -7,9 +7,9 @@ enum Theme {
     static let terminalForeground = NSColor(hex: 0xD6D8DD)
     static let caret = NSColor(hex: 0xC9CCD3)
     static let selection = NSColor(hex: 0x3A3F4B)
-    static let attention = Color(nsColor: NSColor(hex: 0xE3B26B))
-    static let working = Color(nsColor: NSColor(hex: 0x7AA2D6))
     static let secondaryText = Color(nsColor: NSColor(hex: 0x8B8F98))
+    static let quietIndicator = Color(nsColor: NSColor(hex: 0x6E727B))
+    static let running = Color(nsColor: NSColor(hex: 0x7AA2D6))
 
     static let terminalPadding: CGFloat = 14
     static let defaultFontSize: CGFloat = 13

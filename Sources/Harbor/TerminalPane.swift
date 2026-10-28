@@ -5,6 +5,8 @@ import SwiftUI
 /// Shows a session's terminal view, reusing it across SwiftUI updates so scrollback and selection survive.
 struct TerminalPane: NSViewRepresentable {
     let controller: TerminalController
+    /// nil while something else, such as a name being edited, should keep the keyboard.
+    var focusRequest: Int?
     var topInset: CGFloat = 0
 
     func makeNSView(context: Context) -> TerminalContainerView {
@@ -14,6 +16,9 @@ struct TerminalPane: NSViewRepresentable {
     func updateNSView(_ container: TerminalContainerView, context: Context) {
         container.topInset = topInset
         container.show(controller.view)
+        if let focusRequest {
+            container.focus(request: focusRequest)
+        }
     }
 }
 
@@ -22,6 +27,7 @@ final class TerminalContainerView: NSView {
         didSet { needsLayout = true }
     }
     private var terminalView: TerminalView?
+    private var handledFocusRequest: Int?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -45,6 +51,12 @@ final class TerminalContainerView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         focusTerminal()
+    }
+
+    func focus(request: Int) {
+        guard request != handledFocusRequest else { return }
+        handledFocusRequest = request
+        DispatchQueue.main.async { [weak self] in self?.focusTerminal() }
     }
 
     private func focusTerminal() {

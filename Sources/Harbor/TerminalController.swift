@@ -21,6 +21,7 @@ final class TerminalController: NSObject, TerminalViewDelegate {
     /// The size the view settled on, known once it has been laid out in a window.
     @ObservationIgnored private(set) var layoutSize: TerminalSize?
     @ObservationIgnored var onLayout: (() -> Void)?
+    @ObservationIgnored var onRestartRequest: (() -> Void)?
     @ObservationIgnored private var hostConnection: HostConnection?
     @ObservationIgnored private var isReplaying = false
 
@@ -69,6 +70,17 @@ final class TerminalController: NSObject, TerminalViewDelegate {
         }
     }
 
+    var exitCode: Int32? {
+        if case .ended(let code) = connection { return code }
+        return nil
+    }
+
+    /// The host started a new shell in this session while the view stayed attached.
+    func markRestarted() {
+        guard case .ended = connection, hostConnection != nil else { return }
+        connection = .attached
+    }
+
     func detach() {
         hostConnection?.close()
         hostConnection = nil
@@ -102,7 +114,12 @@ final class TerminalController: NSObject, TerminalViewDelegate {
         }
     }
 
-    func clearScrollback() {
+    /// Like Terminal's Clear to Start: the cursor's line moves to the top and everything above it goes.
+    func clear() {
+        let row = view.terminalStateSnapshot().cursor.row
+        if row > 0 {
+            view.feed(text: "\u{1B}[\(row)S\u{1B}[\(row)A")
+        }
         view.clearScrollback()
     }
 
@@ -114,6 +131,12 @@ final class TerminalController: NSObject, TerminalViewDelegate {
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         guard !isReplaying else { return }
+        if case .ended = connection {
+            if data.contains(0x0D) {
+                onRestartRequest?()
+            }
+            return
+        }
         sendFrame(Frame(.input, payload: Array(data)))
     }
 

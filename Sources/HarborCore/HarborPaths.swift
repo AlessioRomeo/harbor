@@ -13,6 +13,7 @@ public struct HarborPaths: Sendable {
     }
 
     public var socket: URL { directory.appendingPathComponent("host.sock") }
+    public var workspace: URL { directory.appendingPathComponent("workspace.json") }
     public var savedOutputDirectory: URL { directory.appendingPathComponent("scrollback", isDirectory: true) }
 
     public func savedOutput(for id: UUID) -> URL {
