@@ -54,23 +54,16 @@ final class HostSession: LocalProcessDelegate, @unchecked Sendable {
     }
 
     /// Interactive shells ignore SIGTERM, so hang up the shell's process group and the
-    /// foreground job; `forceKill` finishes off anything that survived the hangup.
-    func hangUp() {
-        signalProcessGroups(SIGHUP)
-    }
-
-    func forceKill() {
-        signalProcessGroups(SIGKILL)
-    }
-
-    private func signalProcessGroups(_ signal: Int32) {
+    /// foreground job. Returns the groups signalled, which outlive the shell when a job ignores HUP.
+    func hangUp() -> [pid_t] {
         let shell = process.shellPid
-        guard shell > 0 else { return }
+        guard shell > 0 else { return [] }
         let foreground = tcgetpgrp(process.childfd)
-        if foreground > 0, foreground != shell {
-            killpg(foreground, signal)
+        let groups = foreground > 0 && foreground != shell ? [foreground, shell] : [shell]
+        for group in groups {
+            killpg(group, SIGHUP)
         }
-        killpg(shell, signal)
+        return groups
     }
 
     func dataReceived(slice: ArraySlice<UInt8>) {

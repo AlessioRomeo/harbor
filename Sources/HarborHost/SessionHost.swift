@@ -164,10 +164,11 @@ public final class SessionHost: @unchecked Sendable {
             guard !session.hasExited else { break }
             session.isBeingKilled = true
             dyingSessions[id] = session
-            session.hangUp()
-            queue.asyncAfter(deadline: .now() + Self.killGracePeriod) { [weak session] in
-                guard let session, !session.hasExited else { return }
-                session.forceKill()
+            let groups = session.hangUp()
+            queue.asyncAfter(deadline: .now() + Self.killGracePeriod) {
+                for group in groups {
+                    killpg(group, SIGKILL)
+                }
             }
         case .clear(let id):
             sessions[id]?.clearHistory()

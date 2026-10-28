@@ -60,12 +60,20 @@ final class ClientConnection: @unchecked Sendable {
         }
     }
 
+    /// Sends the failure, then closes once it is written.
     func fail(_ message: String) {
         reject(Failure(message))
-        close()
+        stopReading()
     }
 
+    /// Closes at once, abandoning any write still blocked on a client that stopped reading.
     func close() {
+        guard !isClosed else { return }
+        Darwin.shutdown(fd, SHUT_RDWR)
+        stopReading()
+    }
+
+    private func stopReading() {
         guard !isClosed else { return }
         isClosed = true
         readSource.cancel()

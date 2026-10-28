@@ -128,6 +128,24 @@ final class SessionHostTests {
         #expect(String(decoding: saved, as: UTF8.self).contains("pid=\(pid)."))
     }
 
+    @Test func killEndsAForegroundJobThatIgnoresHangup() throws {
+        let control = try connect()
+        let id = try createSession(on: control)
+        let session = try connect(attach: id)
+        try type("sh -c 'trap \"\" HUP; echo job=$$.; exec sleep 300'\n", into: session)
+        let output = try readOutput(from: session) { $0.contains(/job=\d+\./) }
+        let pidText = try #require(output.firstMatch(of: /job=(\d+)\./)?.1)
+        let pid = try #require(pid_t(pidText))
+        try waitForStatus(on: control) { $0.first { $0.id == id }?.activity == .busy }
+
+        try control.send(.kill(id: id, saveOutput: false))
+        let deadline = Date().addingTimeInterval(SessionHost.killGracePeriod + 2)
+        while kill(pid, 0) == 0, Date() < deadline {
+            usleep(50_000)
+        }
+        #expect(kill(pid, 0) != 0, "job \(pid) survived the kill")
+    }
+
     @Test func reportsWhenTheShellExits() throws {
         let control = try connect()
         let id = try createSession(on: control)
