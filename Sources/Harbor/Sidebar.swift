@@ -23,10 +23,11 @@ struct Sidebar: View {
                 Section {
                     GroupHeader(group: group)
                         .selectionDisabled()
-                    if model.workspace.liveSessions(in: group.id).isEmpty {
+                    let isCollapsed = model.collapsedGroups.contains(group.id)
+                    if !isCollapsed, model.workspace.liveSessions(in: group.id).isEmpty {
                         EmptyGroupRow(groupID: group.id)
                     }
-                    ForEach(model.workspace.liveSessions(in: group.id)) { session in
+                    ForEach(isCollapsed ? [] : model.workspace.liveSessions(in: group.id)) { session in
                         SessionRow(session: session)
                             .tag(session.id)
                             .itemProvider {
@@ -52,6 +53,8 @@ private enum SidebarMetrics {
     static let rowHeight: CGFloat = 32
     static let rowInset = EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4)
     static let headerInset = EdgeInsets(top: 16, leading: 6, bottom: 6, trailing: 4)
+    /// Group titles start with the fold arrow, which takes the place of the leading inset.
+    static let groupHeaderInset = EdgeInsets(top: 16, leading: 0, bottom: 6, trailing: 4)
 }
 
 private struct GroupHeader: View {
@@ -60,10 +63,29 @@ private struct GroupHeader: View {
     @State private var isHovered = false
 
     var body: some View {
+        let isCollapsed = model.collapsedGroups.contains(group.id)
         HStack(spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { model.toggleCollapsed(group.id) }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Theme.quietIndicator)
+            .help(isCollapsed ? "Show \(group.name)'s sessions" : "Fold \(group.name) away")
             RenamableText(id: group.id, name: group.name)
                 .textCase(.uppercase)
                 .tracking(0.6)
+            if isCollapsed, model.groupNeedsAttention(group.id) {
+                Circle()
+                    .fill(Theme.attention)
+                    .frame(width: 7, height: 7)
+                    .help("A session in \(group.name) needs you")
+            }
             Spacer(minLength: 4)
             Button {
                 model.newSession(in: group.id)
@@ -79,7 +101,7 @@ private struct GroupHeader: View {
             .help("New session in \(group.name)")
         }
         .font(.caption.weight(.semibold))
-        .padding(SidebarMetrics.headerInset)
+        .padding(SidebarMetrics.groupHeaderInset)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture { model.showGroupAsGrid(group.id) }

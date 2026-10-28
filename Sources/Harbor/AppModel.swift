@@ -9,6 +9,7 @@ final class AppModel {
     private static let fontSizeKey = "terminalFontSize"
     private static let selectionKey = "selectedSessionID"
     private static let autoArchiveKey = "autoArchiveDays"
+    private static let collapsedGroupsKey = "collapsedGroups"
     static let autoArchiveChoices = [3, 7, 14, 0]
     private static let activityResolution: TimeInterval = 60
     static let newSessionName = "New session"
@@ -301,6 +302,22 @@ final class AppModel {
     var isZoomed = false
     /// In full screen there's no title bar, so panes can start at the very top.
     var isFullScreen = false
+    /// Groups folded away in the sidebar, remembered across launches.
+    private(set) var collapsedGroups: Set<UUID> = Set(
+        (UserDefaults.standard.stringArray(forKey: AppModel.collapsedGroupsKey) ?? []).compactMap(UUID.init(uuidString:))
+    )
+
+    func toggleCollapsed(_ groupID: UUID) {
+        if collapsedGroups.remove(groupID) == nil {
+            collapsedGroups.insert(groupID)
+        }
+        UserDefaults.standard.set(collapsedGroups.map(\.uuidString), forKey: Self.collapsedGroupsKey)
+    }
+
+    /// Whether any live session of the group needs me, for a folded group's title.
+    func groupNeedsAttention(_ groupID: UUID) -> Bool {
+        workspace.liveSessions(in: groupID).contains { indicator(of: $0.id).needsAttention }
+    }
     /// The session being dragged right now, so its own pane offers no place to drop it.
     var draggedSession: UUID?
 
