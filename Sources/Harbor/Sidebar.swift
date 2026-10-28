@@ -27,7 +27,10 @@ struct Sidebar: View {
                     ForEach(model.workspace.liveSessions(in: group.id)) { session in
                         SessionRow(session: session)
                             .tag(session.id)
-                            .itemProvider { NSItemProvider(object: session.id.uuidString as NSString) }
+                            .itemProvider {
+                                model.draggedSession = session.id
+                                return NSItemProvider(object: session.id.uuidString as NSString)
+                            }
                             .contextMenu { SessionMenu(session: session) }
                     }
                     .onMove { model.moveSessions(in: group.id, from: $0, to: $1) }
@@ -63,6 +66,8 @@ private struct GroupHeader: View {
             .padding(.top, 10)
             .contextMenu {
                 Button("New Session") { model.newSession(in: group.id) }
+                Button("Show as Grid") { model.showGroupAsGrid(group.id) }
+                    .disabled(model.workspace.liveSessions(in: group.id).isEmpty)
                 Button("Rename…") { model.editingID = group.id }
                 Divider()
                 Button("Move Up") { model.moveGroup(group.id, by: -1) }

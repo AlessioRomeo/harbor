@@ -71,7 +71,7 @@ struct HarborCommands: Commands {
                 .keyboardShortcut("d", modifiers: [.command, .shift])
             Button("Take Pane Off Screen") { model.closeFocusedPane() }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
-                .disabled(model.paneCount < 2)
+                .disabled(!model.arePanesShown || model.paneCount < 2)
             Divider()
             Button("Focus Left") { model.moveFocus(toward: .left) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
@@ -82,9 +82,17 @@ struct HarborCommands: Commands {
             Button("Focus Down") { model.moveFocus(toward: .bottom) }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
             Divider()
+            Button(model.isZoomed ? "Show All Panes" : "Zoom Pane") { model.toggleZoom() }
+                .keyboardShortcut(.return, modifiers: [.command, .shift])
+                .disabled(!model.arePanesShown || model.paneCount < 2)
             Button("Even Out Panes") { model.evenOutPanes() }
                 .keyboardShortcut("=", modifiers: [.command, .control])
-                .disabled(model.paneCount < 2)
+                .disabled(!model.arePanesShown || model.paneCount < 2)
+            Button("Show Group as Grid") { model.showCurrentGroupAsGrid() }
+                .keyboardShortcut("g", modifiers: [.command, .option])
+            Divider()
+            Button("Next Session Needing Me") { model.jumpToNextNeedingAttention() }
+                .keyboardShortcut("j")
         }
         CommandGroup(replacing: .printItem) {}
         CommandGroup(after: .pasteboard) {

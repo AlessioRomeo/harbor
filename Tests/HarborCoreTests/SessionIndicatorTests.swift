@@ -73,6 +73,17 @@ struct StaleClaudeEventTests {
     }
 }
 
+struct LongestWaitingTests {
+    @Test func picksTheOldestReport() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let old = UUID(), recent = UUID(), unknown = UUID()
+        let events = [old: ClaudeEvent(kind: .finished, at: now.addingTimeInterval(-600)), recent: ClaudeEvent(kind: .waiting, at: now)]
+        #expect(ClaudeEvent.longestWaiting(among: [recent, unknown, old], events: events) == old)
+        #expect(ClaudeEvent.longestWaiting(among: [unknown, recent], events: events) == recent)
+        #expect(ClaudeEvent.longestWaiting(among: [UUID](), events: events) == nil)
+    }
+}
+
 struct ClaudeEventStoreTests {
     @Test func readsOneEventPerSessionWithTheFileTime() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("claude-\(UUID().uuidString)")

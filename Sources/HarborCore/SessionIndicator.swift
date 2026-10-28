@@ -82,3 +82,10 @@ extension ClaudeEvent {
         }.sorted { $0.uuidString < $1.uuidString }
     }
 }
+
+extension ClaudeEvent {
+    /// Of the sessions needing me, the one waiting longest, so ⌘J works through them oldest first.
+    public static func longestWaiting(among ids: some Sequence<UUID>, events: [UUID: ClaudeEvent]) -> UUID? {
+        ids.min { (events[$0]?.at ?? .distantFuture, $0.uuidString) < (events[$1]?.at ?? .distantFuture, $1.uuidString) }
+    }
+}

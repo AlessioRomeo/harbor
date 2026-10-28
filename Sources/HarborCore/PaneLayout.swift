@@ -19,6 +19,32 @@ public enum PaneEdge: String, Codable, Sendable, CaseIterable {
 public enum PaneDrop: Equatable, Sendable {
     case edge(PaneEdge)
     case center
+
+    /// How far into a pane, as a share of its size, a drop still counts as its edge.
+    public static let edgeDepth: CGFloat = 0.25
+
+    /// The drop for a point inside a pane of `size`, with y growing downwards.
+    public init(at point: CGPoint, in size: CGSize) {
+        let x = point.x / max(size.width, 1)
+        let y = point.y / max(size.height, 1)
+        let nearest = [(PaneEdge.left, x), (.right, 1 - x), (.top, y), (.bottom, 1 - y)].min { $0.1 < $1.1 }
+        if let nearest, nearest.1 < Self.edgeDepth {
+            self = .edge(nearest.0)
+        } else {
+            self = .center
+        }
+    }
+
+    /// The part of a pane of `size` the dropped session would take.
+    public func previewRect(in size: CGSize) -> CGRect {
+        let bounds = CGRect(origin: .zero, size: size)
+        switch self {
+        case .center: return bounds
+        case .edge(let edge):
+            let (first, second) = PaneLayout.divide(bounds, axis: edge.axis, ratio: 0.5)
+            return edge.placesFirst ? first : second
+        }
+    }
 }
 
 /// How the window is divided between sessions: a binary split tree whose leaves are session ids.

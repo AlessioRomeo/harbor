@@ -1,6 +1,7 @@
 import AppKit
 import HarborCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The sessions on screen. Panes are placed from the layout's frames and keyed by session, so a
 /// terminal keeps its view (and scrollback, selection) however the layout around it changes.
@@ -18,17 +19,18 @@ struct PaneCanvas: View {
             let top = isSingle ? 0 : Self.headerClearance
             let bounds = CGRect(x: 0, y: top, width: geometry.size.width, height: max(0, geometry.size.height - top))
             let shown = liveRatios.reduce(layout) { $0.settingRatio($1.value, at: $1.key) }
-            let frames = shown.frames(in: bounds)
+            let zoomed = model.isZoomed ? model.workspace.focusedPane.flatMap { layout.contains($0) ? $0 : nil } : nil
+            let frames = zoomed.map { [$0: bounds] } ?? shown.frames(in: bounds)
             ZStack(alignment: .topLeading) {
                 Color(nsColor: Theme.terminalBackground)
                 ForEach(shown.sessionIDs, id: \.self) { id in
                     if let frame = frames[id], let controller = model.controllers[id] {
-                        PaneView(controller: controller, isSingle: isSingle)
+                        PaneView(controller: controller, isSingle: isSingle, size: frame.size)
                             .frame(width: frame.width, height: frame.height)
                             .offset(x: frame.minX, y: frame.minY)
                     }
                 }
-                ForEach(shown.splitAreas(in: bounds), id: \.path) { area in
+                ForEach(zoomed == nil ? shown.splitAreas(in: bounds) : [], id: \.path) { area in
                     DividerHandle(area: area) { ratio in
                         liveRatios[area.path] = ratio
                     } onEnd: { ratio in
@@ -49,8 +51,11 @@ private struct PaneView: View {
     @Environment(AppModel.self) private var model
     let controller: TerminalController
     let isSingle: Bool
+    let size: CGSize
+    @State private var drop: PaneDrop?
 
     private var isFocused: Bool { model.selectedID == controller.id }
+    private var needsAttention: Bool { model.indicator(of: controller.id).needsAttention }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,6 +79,64 @@ private struct PaneView: View {
                     .animation(.easeInOut(duration: 0.2), value: isFocused)
             }
         }
+        .overlay {
+            Rectangle()
+                .strokeBorder(Theme.attention.opacity(needsAttention && !isFocused ? 0.65 : 0), lineWidth: 1.5)
+                .shadow(color: Theme.attention.opacity(needsAttention && !isFocused ? 0.35 : 0), radius: 6)
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.3), value: needsAttention)
+        }
+        .overlay(alignment: .topLeading) {
+            if let drop {
+                let rect = drop.previewRect(in: size).insetBy(dx: 6, dy: 6)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.accentColor.opacity(0.16))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 1.5))
+                    .frame(width: rect.width, height: rect.height)
+                    .offset(x: rect.minX, y: rect.minY)
+                    .allowsHitTesting(false)
+                    .animation(.easeOut(duration: 0.12), value: drop)
+            }
+        }
+        .onDrop(of: [.plainText], delegate: PaneDropDelegate(target: controller.id, size: size, drop: $drop, model: model))
+    }
+}
+
+/// Sessions dragged from the sidebar or by a pane's header land beside this pane or in its place.
+private struct PaneDropDelegate: DropDelegate {
+    let target: UUID
+    let size: CGSize
+    @Binding var drop: PaneDrop?
+    let model: AppModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        model.draggedSession != target
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard model.draggedSession != target else {
+            drop = nil
+            return DropProposal(operation: .forbidden)
+        }
+        drop = PaneDrop(at: info.location, in: size)
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        drop = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let placement = PaneDrop(at: info.location, in: size)
+        drop = nil
+        guard let provider = info.itemProviders(for: [.plainText]).first else { return false }
+        let target = target
+        let model = model
+        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+            guard let text = object as? String, let id = UUID(uuidString: text) else { return }
+            DispatchQueue.main.async { model.place(id, at: placement, of: target) }
+        }
+        return true
     }
 }
 
@@ -90,6 +153,18 @@ private struct PaneHeader: View {
                 .foregroundStyle(isFocused ? .primary : .secondary)
                 .lineLimit(1)
             Spacer(minLength: 6)
+            if model.isZoomed {
+                Button {
+                    model.toggleZoom()
+                } label: {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 16, height: 16)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Show all panes (⇧⌘↩)")
+            }
             if isHovered {
                 Button {
                     model.selectedID = id
@@ -114,6 +189,10 @@ private struct PaneHeader: View {
         .contentShape(Rectangle())
         .onTapGesture { model.selectedID = id }
         .onHover { isHovered = $0 }
+        .onDrag {
+            model.draggedSession = id
+            return NSItemProvider(object: id.uuidString as NSString)
+        }
     }
 }
 
@@ -155,11 +234,17 @@ private struct DividerHandle: View {
         )
     }
 
+    /// Room for about 24 columns, or a header and 6 rows, on each side of the divider.
+    private static let minimumPaneWidth: CGFloat = 230
+    private static let minimumPaneHeight: CGFloat = 150
+
     private func ratio(at location: CGPoint) -> Double {
-        let ratio = area.axis == .horizontal
-            ? (location.x - area.bounds.minX) / max(area.bounds.width, 1)
-            : (location.y - area.bounds.minY) / max(area.bounds.height, 1)
-        return min(max(ratio, PaneLayout.ratioRange.lowerBound), PaneLayout.ratioRange.upperBound)
+        let isHorizontal = area.axis == .horizontal
+        let length = isHorizontal ? area.bounds.width : area.bounds.height
+        let offset = isHorizontal ? location.x - area.bounds.minX : location.y - area.bounds.minY
+        let minimum = isHorizontal ? Self.minimumPaneWidth : Self.minimumPaneHeight
+        guard length > minimum * 2 else { return area.ratio }
+        return min(max(offset, minimum), length - minimum) / length
     }
 }
 

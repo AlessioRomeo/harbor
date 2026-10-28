@@ -33,6 +33,9 @@ final class AppModel {
     /// Selecting a live session that isn't on screen puts it in the focused pane's place.
     var selectedID: UUID? {
         didSet {
+            if selectedID == nil, oldValue != nil, let focused = workspace.focusedPane {
+                selectedID = focused
+            }
             guard selectedID != oldValue else { return }
             UserDefaults.standard.set(selectedID?.uuidString, forKey: Self.selectionKey)
             if let selectedID {
@@ -216,6 +219,11 @@ final class AppModel {
         workspace.layout?.sessionIDs.count ?? 0
     }
 
+    /// Pane commands act only while the panes are what's on screen, not an archived session.
+    var arePanesShown: Bool {
+        selectedID.map { workspace.layout?.contains($0) == true } ?? false
+    }
+
     private func bringOnScreen(_ id: UUID) {
         guard let session = workspace.session(id), !session.isArchived else { return }
         update { workspace in
@@ -231,7 +239,7 @@ final class AppModel {
 
     /// A new session beside the focused pane, in the same group, named straight away.
     func splitFocusedPane(toward edge: PaneEdge) {
-        guard let focused = workspace.focusedPane, let layout = workspace.layout, let group = workspace.session(focused)?.groupID else {
+        guard arePanesShown, let focused = workspace.focusedPane, let layout = workspace.layout, let group = workspace.session(focused)?.groupID else {
             newSession()
             return
         }
@@ -248,19 +256,67 @@ final class AppModel {
 
     /// Takes the focused pane off screen; its session keeps running in the sidebar.
     func closeFocusedPane() {
-        guard paneCount > 1, let focused = workspace.focusedPane else { return }
+        guard arePanesShown, paneCount > 1, let focused = workspace.focusedPane else { return }
         update { $0.removeFromLayout(focused) }
+        if paneCount < 2 {
+            isZoomed = false
+        }
         selectedID = workspace.focusedPane
     }
 
     func moveFocus(toward edge: PaneEdge) {
-        guard let focused = workspace.focusedPane, let next = workspace.layout?.neighbour(of: focused, toward: edge) else { return }
+        guard arePanesShown, let focused = workspace.focusedPane, let next = workspace.layout?.neighbour(of: focused, toward: edge) else { return }
         selectedID = next
     }
 
     func evenOutPanes() {
-        guard let layout = workspace.layout else { return }
+        guard arePanesShown, let layout = workspace.layout else { return }
         update { $0.setLayout(layout.evened) }
+    }
+
+    /// The focused pane fills the window; moving the focus shows another pane the same way.
+    var isZoomed = false
+    /// The session being dragged right now, so its own pane offers no place to drop it.
+    var draggedSession: UUID?
+
+    func toggleZoom() {
+        isZoomed = arePanesShown && paneCount > 1 && !isZoomed
+    }
+
+    /// Puts a session beside a pane, or in its place; a session already on screen moves there.
+    func place(_ id: UUID, at drop: PaneDrop, of target: UUID) {
+        guard id != target, let session = workspace.session(id), !session.isArchived, let layout = workspace.layout else { return }
+        update { $0.setLayout(layout.placing(id, at: drop, of: target), focus: id) }
+        selectedID = id
+    }
+
+    /// The group's live sessions as an even grid, the focused one keeping the keyboard if it's among them.
+    func showGroupAsGrid(_ groupID: UUID) {
+        let ids = workspace.liveSessions(in: groupID).map(\.id)
+        guard let grid = PaneLayout.grid(ids) else { return }
+        let focus = selectedID.flatMap { grid.contains($0) ? $0 : nil } ?? grid.sessionIDs.first
+        isZoomed = false
+        update { $0.setLayout(grid, focus: focus) }
+        if let focus {
+            selectedID = focus
+        }
+        prepareVisibleControllers()
+    }
+
+    func showCurrentGroupAsGrid() {
+        if let group = currentGroupID {
+            showGroupAsGrid(group)
+        }
+    }
+
+    /// The session that has needed me longest, on screen or not.
+    func jumpToNextNeedingAttention() {
+        let needing = workspace.liveSessions.map(\.id).filter { indicator(of: $0).needsAttention }
+        guard let next = ClaudeEvent.longestWaiting(among: needing, events: claudeEvents) else {
+            NSSound.beep()
+            return
+        }
+        selectedID = next
     }
 
     func setSplitRatio(_ ratio: Double, at path: [Bool]) {
@@ -446,9 +502,10 @@ final class AppModel {
         if host.activities[id] != nil {
             host.send(.kill(id: id, saveOutput: true))
         }
+        let sidebarNeighbour = neighbour(of: session)
         update { $0.archive(id, at: Date()) }
         if selectedID == id {
-            selectedID = workspace.focusedPane ?? neighbour(of: session)
+            selectedID = workspace.focusedPane ?? sidebarNeighbour
         }
         notifier.withdraw(sessionID: id)
         refreshAttention()
@@ -462,14 +519,14 @@ final class AppModel {
     }
 
     func deletePermanently(_ id: UUID) {
-        let session = workspace.session(id)
+        let sidebarNeighbour = workspace.session(id).flatMap(neighbour(of:))
         controllers.removeValue(forKey: id)?.detach()
         if host.activities[id] != nil {
             host.send(.kill(id: id, saveOutput: false))
         }
         update { $0.deleteSession(id) }
         if selectedID == id {
-            selectedID = workspace.focusedPane ?? session.flatMap(neighbour(of:))
+            selectedID = workspace.focusedPane ?? sidebarNeighbour
         }
         do {
             let saved = host.paths.savedOutput(for: id)

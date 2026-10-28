@@ -166,6 +166,24 @@ struct PaneLayoutTests {
     }
 }
 
+struct PaneDropTests {
+    private let size = CGSize(width: 400, height: 200)
+
+    @Test func edgesWinNearTheBorder() {
+        #expect(PaneDrop(at: CGPoint(x: 20, y: 100), in: size) == .edge(.left))
+        #expect(PaneDrop(at: CGPoint(x: 390, y: 100), in: size) == .edge(.right))
+        #expect(PaneDrop(at: CGPoint(x: 200, y: 10), in: size) == .edge(.top))
+        #expect(PaneDrop(at: CGPoint(x: 200, y: 195), in: size) == .edge(.bottom))
+        #expect(PaneDrop(at: CGPoint(x: 200, y: 100), in: size) == .center)
+    }
+
+    @Test func previewsTheHalfThatWouldBeTaken() {
+        #expect(PaneDrop.edge(.left).previewRect(in: size) == CGRect(x: 0, y: 0, width: 200, height: 200))
+        #expect(PaneDrop.edge(.bottom).previewRect(in: size) == CGRect(x: 0, y: 100, width: 400, height: 100))
+        #expect(PaneDrop.center.previewRect(in: size) == CGRect(origin: .zero, size: size))
+    }
+}
+
 struct WorkspaceLayoutTests {
     @Test func keepsOnlyLiveSessionsInTheLayout() throws {
         var workspace = Workspace()
