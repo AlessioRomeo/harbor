@@ -13,12 +13,16 @@ struct Sidebar: View {
                 sessionList
             }
         }
-        .safeAreaPadding(.top, model.isFullScreen ? Self.fullScreenTopMargin : 0)
+        .hidingScrollEdgeEffect()
+        .safeAreaPadding(.top, (model.isFullScreen ? Self.fullScreenTopMargin : PaneCanvas.titleBarHeight) + Self.firstSectionGap)
+        .ignoresSafeArea(edges: .top)
         .safeAreaInset(edge: .bottom) { SidebarFooter() }
     }
 
     /// Clears the sidebar button's row with the same gap the window's toolbar leaves outside full screen.
     private static let fullScreenTopMargin: CGFloat = PaneCanvas.titleBarHeight + 24
+    /// A list outside the system's sidebar column starts its first section 10 pt lower.
+    private static let firstSectionGap: CGFloat = -10
 
     private var sessionList: some View {
         @Bindable var model = model
@@ -49,6 +53,19 @@ struct Sidebar: View {
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, SidebarMetrics.rowHeight)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+private extension View {
+    /// macOS 26 fades list content under the title bar; the sidebar has always scrolled cleanly up to it.
+    @ViewBuilder
+    func hidingScrollEdgeEffect() -> some View {
+        if #available(macOS 26, *) {
+            scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            self
+        }
     }
 }
 
@@ -280,6 +297,7 @@ private struct ArchiveList: View {
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, SidebarMetrics.rowHeight)
+        .scrollContentBackground(.hidden)
     }
 }
 

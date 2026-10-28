@@ -7,15 +7,16 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView(columnVisibility: $model.sidebarVisibility) {
-            Sidebar()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
-                .toolbar(removing: .sidebarToggle)
-                .overlay(alignment: .topTrailing) {
-                    SidebarToggle()
-                        .padding(.trailing, 10)
+        HStack(spacing: 0) {
+            if !model.isSidebarHidden {
+                HStack(spacing: 0) {
+                    SidebarColumn(model: model)
+                        .frame(width: model.sidebarWidth)
+                        .ignoresSafeArea()
+                    SidebarDivider()
                 }
-        } detail: {
+                .transition(.move(edge: .leading))
+            }
             DetailView()
                 .overlay(alignment: .topLeading) {
                     if model.isSidebarHidden {
@@ -84,6 +85,108 @@ private struct SidebarToggle: View {
         .foregroundStyle(.secondary)
         .help(model.isSidebarHidden ? "Show sidebar (⌃⌘S)" : "Hide sidebar (⌃⌘S)")
         .ignoresSafeArea()
+    }
+}
+
+/// The sidebar on the material macOS puts behind sidebars, built by Harbor so the system never
+/// restyles it. The content sits inside the material view, not over it, so its text gets the
+/// same vibrancy the system sidebar gave it.
+private struct SidebarColumn: NSViewRepresentable {
+    let model: AppModel
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let material = NSVisualEffectView()
+        material.material = .sidebar
+        material.blendingMode = .behindWindow
+        material.state = .followsWindowActiveState
+        let content = NSHostingView(rootView: content)
+        content.autoresizingMask = [.width, .height]
+        content.frame = material.bounds
+        material.addSubview(content)
+        return material
+    }
+
+    func updateNSView(_ material: NSVisualEffectView, context: Context) {}
+
+    private var content: some View {
+        Sidebar()
+            .overlay(alignment: .topTrailing) {
+                SidebarToggle()
+                    .padding(.trailing, 10)
+            }
+            .environment(model)
+    }
+}
+
+/// The hairline between the sidebar and the panes, as AppKit's thin split view divider draws it:
+/// its colour over the sidebar material. Dragging it resizes the sidebar, or hides it when dragged far enough.
+private struct SidebarDivider: View {
+    @Environment(AppModel.self) private var model
+    @State private var widthAtDragStart: Double?
+
+    /// The grab area reaches this far over the sidebar, as the system divider's does.
+    private static let gripOverSidebar: CGFloat = 3
+
+    var body: some View {
+        DividerLine()
+            .frame(width: 1)
+            .ignoresSafeArea()
+            .overlay(alignment: .trailing) {
+                Color.clear
+                    .frame(width: Self.gripOverSidebar + 1)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let start = widthAtDragStart ?? model.sidebarWidth
+                                widthAtDragStart = start
+                                let width = start + drag.translation.width
+                                if width < SidebarWidth.hidingThreshold {
+                                    widthAtDragStart = nil
+                                    model.toggleSidebar()
+                                } else {
+                                    model.sidebarWidth = SidebarWidth.clamped(width)
+                                }
+                            }
+                            .onEnded { _ in widthAtDragStart = nil }
+                    )
+                    .ignoresSafeArea()
+            }
+    }
+
+    private struct DividerLine: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSView {
+            let material = NSVisualEffectView()
+            material.material = .sidebar
+            material.blendingMode = .behindWindow
+            material.state = .followsWindowActiveState
+            let line = LineView()
+            line.autoresizingMask = [.width, .height]
+            material.addSubview(line)
+            return material
+        }
+
+        func updateNSView(_ nsView: NSView, context: Context) {}
+
+        private final class LineView: NSView {
+            private static let color: NSColor = {
+                let splitView = NSSplitView()
+                splitView.dividerStyle = .thin
+                return splitView.dividerColor
+            }()
+
+            override func draw(_ dirtyRect: NSRect) {
+                Self.color.setFill()
+                bounds.fill()
+            }
+        }
     }
 }
 

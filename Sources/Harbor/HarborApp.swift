@@ -11,7 +11,10 @@ struct HarborApp: App {
             ContentView()
                 .environment(model)
                 .preferredColorScheme(.dark)
-                .task { model.start() }
+                .task {
+                    appDelegate.model = model
+                    model.start()
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 720)
@@ -26,6 +29,14 @@ struct HarborApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var model: AppModel?
+
+    /// The View menu's system Toggle Sidebar item sends this up the responder chain; with no
+    /// system split view to take it, it ends here.
+    @objc func toggleSidebar(_ sender: Any?) {
+        model?.toggleSidebar()
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         SelectionEditing.install()

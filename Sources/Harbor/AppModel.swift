@@ -11,6 +11,8 @@ final class AppModel {
     private static let selectionKey = "selectedSessionID"
     private static let autoArchiveKey = "autoArchiveDays"
     private static let collapsedGroupsKey = "collapsedGroups"
+    private static let sidebarWidthKey = "sidebarWidth"
+    private static let systemSidebarFramesKey = "NSSplitView Subview Frames main, SidebarNavigationSplitView"
     static let autoArchiveChoices = [3, 7, 14, 0]
     private static let activityResolution: TimeInterval = 60
     static let newSessionName = "New session"
@@ -314,17 +316,30 @@ final class AppModel {
     var isZoomed = false
     /// In full screen there's no title bar, so panes can start at the very top.
     var isFullScreen = false
-    /// Whether the sidebar is shown; the window's buttons then sit over it, not over the panes.
-    var sidebarVisibility = NavigationSplitViewVisibility.all
-
-    var isSidebarHidden: Bool {
-        sidebarVisibility == .detailOnly
-    }
+    /// Whether the sidebar is out of the way; the window's buttons then sit over the panes, not over it.
+    var isSidebarHidden = false
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.2)) {
-            sidebarVisibility = isSidebarHidden ? .all : .detailOnly
+            isSidebarHidden.toggle()
         }
+    }
+
+    /// Remembered across launches. The first launch takes the width macOS saved for the sidebar
+    /// Harbor used to get from the system, so nobody's sidebar jumps.
+    var sidebarWidth: Double = AppModel.savedSidebarWidth() {
+        didSet {
+            UserDefaults.standard.set(sidebarWidth, forKey: Self.sidebarWidthKey)
+        }
+    }
+
+    private static func savedSidebarWidth() -> Double {
+        let defaults = UserDefaults.standard
+        if let width = defaults.object(forKey: sidebarWidthKey) as? Double {
+            return SidebarWidth.clamped(width)
+        }
+        let systemFrames = defaults.stringArray(forKey: systemSidebarFramesKey) ?? []
+        return SidebarWidth.clamped(SidebarWidth.fromSavedSplitViewFrames(systemFrames) ?? SidebarWidth.standard)
     }
     /// Groups folded away in the sidebar, remembered across launches.
     private(set) var collapsedGroups: Set<UUID> = Set(
