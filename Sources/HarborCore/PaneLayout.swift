@@ -116,11 +116,11 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
 
     // MARK: Sizing
 
-    /// Sets the ratio of the split found by following `path` (false = first child, true = second).
     static func clamped(_ ratio: Double) -> Double {
         ratio.isFinite ? min(max(ratio, ratioRange.lowerBound), ratioRange.upperBound) : 0.5
     }
 
+    /// Sets the ratio of the split found by following `path` (false = first child, true = second).
     public func settingRatio(_ ratio: Double, at path: [Bool]) -> PaneLayout {
         let clamped = Self.clamped(ratio)
         guard case .split(let axis, let current, let first, let second) = self else { return self }

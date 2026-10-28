@@ -124,8 +124,14 @@ struct PaneLayoutTests {
     }
 
     @Test func evenedRatiosSurvivePruning() {
-        let row = (0..<11).map { _ in UUID() }
-        let long = PaneLayout.split(.horizontal, ratio: 0.5, first: .pane(a), second: PaneLayout.grid(row)!.evened)
+        var long = PaneLayout.pane(a)
+        var last = a
+        for _ in 0..<11 {
+            let next = UUID()
+            long = long.splitting(last, with: next, at: .right)
+            last = next
+        }
+        let row = long.sessionIDs.filter { $0 != a }
         let evened = long.evened
         let pruned = evened.pruned(keeping: Set([a] + row))
         #expect(pruned == evened)
