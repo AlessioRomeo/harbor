@@ -123,6 +123,16 @@ struct PaneLayoutTests {
         }
     }
 
+    @Test func evenedRatiosSurvivePruning() {
+        let row = (0..<11).map { _ in UUID() }
+        let long = PaneLayout.split(.horizontal, ratio: 0.5, first: .pane(a), second: PaneLayout.grid(row)!.evened)
+        let evened = long.evened
+        let pruned = evened.pruned(keeping: Set([a] + row))
+        #expect(pruned == evened)
+        guard case .split(_, let ratio, _, _) = evened else { return }
+        #expect(PaneLayout.ratioRange.contains(ratio))
+    }
+
     @Test func prunesUnknownAndRepeatedPanes() {
         let messy = PaneLayout.split(
             .horizontal, ratio: 5,
@@ -130,7 +140,7 @@ struct PaneLayoutTests {
             second: .split(.vertical, ratio: 0.5, first: .pane(b), second: .pane(a))
         )
         let pruned = messy.pruned(keeping: [a, b])
-        #expect(pruned == .split(.horizontal, ratio: 0.5, first: .pane(a), second: .pane(b)))
+        #expect(pruned == .split(.horizontal, ratio: PaneLayout.ratioRange.upperBound, first: .pane(a), second: .pane(b)))
         #expect(messy.pruned(keeping: []) == nil)
     }
 
@@ -188,6 +198,31 @@ struct WorkspaceLayoutTests {
         workspace.removeFromLayout(a)
         #expect(workspace.layout == nil)
         #expect(workspace.focusedPane == nil)
+    }
+
+    @Test func focusGoesToThePaneThatTakesTheSpace() throws {
+        var workspace = Workspace()
+        let group = workspace.addGroup(named: "Me")
+        let a = try workspace.addSession(named: "a", to: group)
+        let b = try workspace.addSession(named: "b", to: group)
+        let c = try workspace.addSession(named: "c", to: group)
+        let pair = PaneLayout.split(.horizontal, ratio: 0.5, first: .pane(a), second: .pane(b))
+        workspace.setLayout(.split(.horizontal, ratio: 0.6, first: pair, second: .pane(c)), focus: b)
+        workspace.removeFromLayout(b)
+        #expect(workspace.focusedPane == a)
+    }
+
+    @Test func anExplicitFocusWinsOverTheCurrentOne() throws {
+        var workspace = Workspace()
+        let group = workspace.addGroup(named: "Me")
+        let a = try workspace.addSession(named: "a", to: group)
+        let b = try workspace.addSession(named: "b", to: group)
+        let pair = PaneLayout.split(.horizontal, ratio: 0.5, first: .pane(a), second: .pane(b))
+        workspace.setLayout(pair, focus: a)
+        workspace.setLayout(pair, focus: b)
+        #expect(workspace.focusedPane == b)
+        workspace.setLayout(pair)
+        #expect(workspace.focusedPane == b)
     }
 
     @Test func readsFilesWrittenBeforeLayouts() throws {

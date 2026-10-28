@@ -52,6 +52,14 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
         }
     }
 
+    /// The pane that gets the keyboard when `id` goes: the first pane of the part that takes its space.
+    public func successor(of id: UUID) -> UUID? {
+        guard case .split(_, _, let first, let second) = self else { return nil }
+        if first == .pane(id) { return second.sessionIDs.first }
+        if second == .pane(id) { return first.sessionIDs.first }
+        return first.contains(id) ? first.successor(of: id) : second.successor(of: id)
+    }
+
     /// Removes a pane; its sibling takes the space. Nil when nothing is left.
     public func removing(_ id: UUID) -> PaneLayout? {
         switch self {
@@ -109,8 +117,12 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
     // MARK: Sizing
 
     /// Sets the ratio of the split found by following `path` (false = first child, true = second).
+    static func clamped(_ ratio: Double) -> Double {
+        ratio.isFinite ? min(max(ratio, ratioRange.lowerBound), ratioRange.upperBound) : 0.5
+    }
+
     public func settingRatio(_ ratio: Double, at path: [Bool]) -> PaneLayout {
-        let clamped = min(max(ratio, Self.ratioRange.lowerBound), Self.ratioRange.upperBound)
+        let clamped = Self.clamped(ratio)
         guard case .split(let axis, let current, let first, let second) = self else { return self }
         guard let step = path.first else {
             return .split(axis, ratio: clamped, first: first, second: second)
@@ -126,7 +138,7 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
         guard case .split(let axis, _, let first, let second) = self else { return self }
         let firstCount = Double(first.paneCount(along: axis))
         let secondCount = Double(second.paneCount(along: axis))
-        return .split(axis, ratio: firstCount / (firstCount + secondCount), first: first.evened, second: second.evened)
+        return .split(axis, ratio: Self.clamped(firstCount / (firstCount + secondCount)), first: first.evened, second: second.evened)
     }
 
     private func paneCount(along axis: SplitAxis) -> Int {
@@ -235,8 +247,7 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
             case (nil, nil): return nil
             case (let remaining?, nil), (nil, let remaining?): return remaining
             case (let a?, let b?):
-                let safeRatio = Self.ratioRange.contains(ratio) ? ratio : 0.5
-                return .split(axis, ratio: safeRatio, first: a, second: b)
+                return .split(axis, ratio: Self.clamped(ratio), first: a, second: b)
             }
         }
     }

@@ -149,8 +149,8 @@ public struct Workspace: Codable, Equatable, Sendable {
         removeFromLayout(id)
     }
 
-    /// Stores a layout holding only live sessions, each once. The focus stays where it was if that
-    /// pane is still there, else moves to `focus`, else to the first pane.
+    /// Stores a layout holding only live sessions, each once. The focus goes to `focus` if that pane
+    /// is there, else stays where it was if that pane is still there, else goes to the first pane.
     public mutating func setLayout(_ newLayout: PaneLayout?, focus: UUID? = nil) {
         layout = newLayout?.pruned(keeping: Set(liveSessions.map(\.id)))
         let panes = layout?.sessionIDs ?? []
@@ -165,8 +165,7 @@ public struct Workspace: Codable, Equatable, Sendable {
     /// Takes a pane off screen; the focus moves to the pane that takes its space.
     public mutating func removeFromLayout(_ id: UUID) {
         guard let current = layout, current.contains(id) else { return }
-        let successor = [PaneEdge.right, .left, .bottom, .top].lazy.compactMap { current.neighbour(of: id, toward: $0) }.first
-        setLayout(current.removing(id), focus: focusedPane == id ? successor : focusedPane)
+        setLayout(current.removing(id), focus: focusedPane == id ? current.successor(of: id) : focusedPane)
     }
 
     /// Drops panes of sessions that are gone or archived, as after reading an older or edited file.
