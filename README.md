@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/harbor.mp4"><img src="docs/poster.png" alt="Harbor: sessions grouped in a sidebar, four terminals side by side" width="900"></a>
+  <a href="#tour"><img src="docs/poster.png" alt="Harbor: sessions grouped in a sidebar, four terminals side by side" width="900"></a>
 </p>
 
 <h1 align="center">Harbor</h1>
@@ -11,10 +11,16 @@
 </p>
 
 <p align="center">
-  <a href="docs/harbor.mp4">▶ Watch the 30-second tour</a>
+  <a href="#tour">▶ See the 30-second tour</a>
 </p>
 
 ---
+
+## Tour
+
+<p align="center">
+  <img src="docs/tour.gif" alt="A 30-second tour of Harbor: grouped sessions, Claude notifications, split panes, sessions that survive quitting, and the session switcher" width="800">
+</p>
 
 ## Why
 
