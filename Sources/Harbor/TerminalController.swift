@@ -155,12 +155,80 @@ final class TerminalController: NSObject, TerminalViewDelegate {
 }
 
 /// SwiftTerm doesn't let subclasses see focus changes, but it does let them see clicks.
+/// The click's column also tells which match of a selected word the selection is.
 final class HarborTerminalView: TerminalView {
     var onMouseDown: (() -> Void)?
+    private var mouseDownCell: (column: Int, row: Int)?
 
     override func mouseDown(with event: NSEvent) {
+        mouseDownCell = cell(at: convert(event.locationInWindow, from: nil))
         onMouseDown?()
         super.mouseDown(with: event)
+    }
+
+    /// The screen cell under a point, assuming the view shows the live screen rather than scrollback.
+    private func cell(at point: NSPoint) -> (column: Int, row: Int)? {
+        guard let dimensions = terminalInputStateSnapshot()?.dimensions, dimensions.cols > 0, dimensions.rows > 0,
+              bounds.width > 0, bounds.height > 0 else { return nil }
+        let cellHeight = bounds.height / CGFloat(dimensions.rows)
+        let y = isFlipped ? point.y : bounds.height - point.y
+        return (Int(point.x / (bounds.width / CGFloat(dimensions.cols))), Int(y / cellHeight))
+    }
+
+    /// Replaces a selection inside the line being typed by pressing the keys a person would.
+    /// False when the selection isn't part of the cursor's row, so the key should go on as usual.
+    func replaceSelection(with replacement: String) -> Bool {
+        guard let (edit, row, cursorColumn) = editableSelection() else { return false }
+        let applicationCursor = terminalInputStateSnapshot()?.applicationCursor ?? false
+        selectNone()
+        send(data: edit.keystrokes(cursorColumn: cursorColumn, in: row, applicationCursor: applicationCursor, replacement: replacement)[...])
+        return true
+    }
+
+    @objc func cut(_ sender: Any?) {
+        copy(sender as Any)
+        _ = replaceSelection(with: "")
+    }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(cut(_:)) {
+            return editableSelection() != nil
+        }
+        return super.validateUserInterfaceItem(item)
+    }
+
+    private func editableSelection() -> (SelectionEdit, SelectionEdit.Row, Int)? {
+        guard selectionActive, let selected = getSelection(), let mouseDownCell else { return nil }
+        let state = terminalStateSnapshot()
+        guard mouseDownCell.row == state.cursor.row else { return nil }
+        guard let line = state.visibleRows.first(where: { $0.row == state.cursor.row }) else { return nil }
+        let characters = line.text.map(String.init)
+        let widths = line.cellWidths.filter { $0 > 0 }
+        guard characters.count <= widths.count else { return nil }
+        let row = SelectionEdit.Row(characters: characters, cellWidths: Array(widths.prefix(characters.count)))
+        guard let edit = SelectionEdit(selected: selected, in: row, hintColumn: mouseDownCell.column) else { return nil }
+        return (edit, row, state.cursor.col)
+    }
+}
+
+/// Backspace, Delete or typing over a selection in the line being typed edits it, as in a text field.
+enum SelectionEditing {
+    private static let deleteKeys: Set<UInt16> = [51, 117]
+    /// AppKit's private-use range for arrows, F-keys and the like.
+    private static let functionKeys: ClosedRange<UInt32> = 0xF700...0xF8FF
+
+    static func install() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let view = NSApp.keyWindow?.firstResponder as? HarborTerminalView, view.selectionActive,
+                  event.modifierFlags.isDisjoint(with: [.command, .control, .option]) else { return event }
+            if deleteKeys.contains(event.keyCode) {
+                return view.replaceSelection(with: "") ? nil : event
+            }
+            guard let typed = event.characters, !typed.isEmpty,
+                  typed.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) && !functionKeys.contains($0.value) })
+            else { return event }
+            return view.replaceSelection(with: typed) ? nil : event
+        }
     }
 }
 
