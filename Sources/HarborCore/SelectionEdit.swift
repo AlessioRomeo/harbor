@@ -39,7 +39,8 @@ public struct SelectionEdit: Equatable, Sendable {
         guard let start = starts.min(by: { distance($0) < distance($1) }) else { return nil }
         let cursor = row.characterIndex(atColumn: cursorColumn)
         if start > cursor {
-            guard !row.characters[cursor..<start].joined().contains("  ") else { return nil }
+            let between = row.characters[cursor..<start]
+            guard !between.allSatisfy({ $0 == " " }), !between.joined().contains("  ") else { return nil }
         }
         range = start..<(start + needle.count)
     }

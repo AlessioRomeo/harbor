@@ -57,6 +57,8 @@ struct SelectionEditTests {
         let withRightPrompt = "% git push" + String(repeating: " ", count: 20) + "main"
         #expect(SelectionEdit(selected: "main", in: row(withRightPrompt), hintColumn: 31, cursorColumn: 10) == nil)
         #expect(SelectionEdit(selected: "push", in: row(withRightPrompt), hintColumn: 7, cursorColumn: 10) != nil)
+        let oneGap = "% " + String(repeating: "x", count: 12) + " main"
+        #expect(SelectionEdit(selected: "main", in: row(oneGap), hintColumn: 16, cursorColumn: 14) == nil)
     }
 
     @Test func refusesWhatIsNotOnTheRow() {
