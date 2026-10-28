@@ -32,6 +32,8 @@ public struct Workspace: Codable, Equatable, Sendable {
 
     public private(set) var groups: [SessionGroup]
     public private(set) var sessions: [Session]
+    /// The panes on screen; nil before anything was arranged.
+    public private(set) var layout: PaneLayout?
 
     public init(groups: [SessionGroup] = [], sessions: [Session] = []) {
         self.groups = groups
@@ -142,6 +144,17 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func archive(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }), !sessions[index].isArchived else { return }
         sessions[index].archivedAt = date
+        layout = layout?.removing(id)
+    }
+
+    /// Stores a layout holding only live sessions, each once.
+    public mutating func setLayout(_ newLayout: PaneLayout?) {
+        layout = newLayout?.pruned(keeping: Set(liveSessions.map(\.id)))
+    }
+
+    /// Drops panes of sessions that are gone or archived, as after reading an older or edited file.
+    public mutating func pruneLayout() {
+        setLayout(layout)
     }
 
     /// Brings a session back at the end of its group, or of the first group if its own is gone.
@@ -160,6 +173,7 @@ public struct Workspace: Codable, Equatable, Sendable {
 
     public mutating func deleteSession(_ id: UUID) {
         sessions.removeAll { $0.id == id }
+        layout = layout?.removing(id)
     }
 
     /// Live sessions quiet for `idleInterval` that nothing holds open: no program running,
