@@ -13,6 +13,7 @@ struct Sidebar: View {
                 sessionList
             }
         }
+        .contentMargins(.top, model.isFullScreen ? PaneCanvas.titleBarHeight : 0, for: .scrollContent)
         .safeAreaInset(edge: .bottom) { SidebarFooter() }
     }
 
