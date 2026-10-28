@@ -29,13 +29,13 @@ struct Sidebar: View {
                             .tag(session.id)
                             .itemProvider {
                                 model.draggedSession = session.id
-                                return NSItemProvider(object: session.id.uuidString as NSString)
+                                return SessionDrag.provider(for: session.id)
                             }
                             .contextMenu { SessionMenu(session: session) }
                     }
                     .onMove { model.moveSessions(in: group.id, from: $0, to: $1) }
-                    .onInsert(of: [.plainText]) { index, providers in
-                        receive(providers, into: group.id, at: index)
+                    .onInsert(of: [SessionDrag.type]) { index, providers in
+                        SessionDrag.load(providers) { model.moveSession($0, to: group.id, at: index) }
                     }
                 } header: {
                     GroupHeader(group: group)
@@ -44,15 +44,6 @@ struct Sidebar: View {
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, 40)
-    }
-
-    private func receive(_ providers: [NSItemProvider], into groupID: UUID, at index: Int) {
-        for provider in providers {
-            _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-                guard let text = object as? String, let id = UUID(uuidString: text) else { return }
-                DispatchQueue.main.async { model.moveSession(id, to: groupID, at: index) }
-            }
-        }
     }
 }
 

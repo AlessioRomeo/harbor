@@ -158,6 +158,11 @@ struct PaneLayoutTests {
         #expect(areas[1].dividerPosition == 100)
         #expect(areas[2].bounds == CGRect(x: 0, y: 50, width: 200, height: 50))
         #expect(PaneLayout.pane(a).splitAreas(in: .zero).isEmpty)
+
+        let nested = PaneLayout.split(.horizontal, ratio: 0.5, first: .pane(a), second: .split(.horizontal, ratio: 0.5, first: .pane(b), second: .pane(c)))
+        let root = nested.splitAreas(in: CGRect(x: 0, y: 0, width: 300, height: 100))[0]
+        #expect(root.firstPaneCount == 1)
+        #expect(root.secondPaneCount == 2)
     }
 
     @Test func roundTripsThroughJSON() throws {

@@ -195,6 +195,9 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
         public var axis: SplitAxis
         public var ratio: Double
         public var bounds: CGRect
+        /// Panes side by side along the axis on each side of the divider, so each side can keep room for all of them.
+        public var firstPaneCount: Int
+        public var secondPaneCount: Int
 
         /// The line between the two sides.
         public var dividerPosition: CGFloat {
@@ -205,7 +208,11 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
     public func splitAreas(in bounds: CGRect, path: [Bool] = []) -> [SplitArea] {
         guard case .split(let axis, let ratio, let first, let second) = self else { return [] }
         let (firstRect, secondRect) = Self.divide(bounds, axis: axis, ratio: ratio)
-        return [SplitArea(path: path, axis: axis, ratio: ratio, bounds: bounds)]
+        let area = SplitArea(
+            path: path, axis: axis, ratio: ratio, bounds: bounds,
+            firstPaneCount: first.paneCount(along: axis), secondPaneCount: second.paneCount(along: axis)
+        )
+        return [area]
             + first.splitAreas(in: firstRect, path: path + [false])
             + second.splitAreas(in: secondRect, path: path + [true])
     }

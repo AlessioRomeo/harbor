@@ -120,6 +120,9 @@ final class AppModel {
         let result = try change(&updated)
         guard updated != workspace else { return result }
         workspace = updated
+        if paneCount < 2 {
+            isZoomed = false
+        }
         guard storageError == nil else { return result }
         do {
             try store.save(workspace)
@@ -258,9 +261,6 @@ final class AppModel {
     func closeFocusedPane() {
         guard arePanesShown, paneCount > 1, let focused = workspace.focusedPane else { return }
         update { $0.removeFromLayout(focused) }
-        if paneCount < 2 {
-            isZoomed = false
-        }
         selectedID = workspace.focusedPane
     }
 

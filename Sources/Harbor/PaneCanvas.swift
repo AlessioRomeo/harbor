@@ -98,7 +98,7 @@ private struct PaneView: View {
                     .animation(.easeOut(duration: 0.12), value: drop)
             }
         }
-        .onDrop(of: [.plainText], delegate: PaneDropDelegate(target: controller.id, size: size, drop: $drop, model: model))
+        .onDrop(of: [SessionDrag.type], delegate: PaneDropDelegate(target: controller.id, size: size, drop: $drop, model: model))
     }
 }
 
@@ -110,7 +110,7 @@ private struct PaneDropDelegate: DropDelegate {
     let model: AppModel
 
     func validateDrop(info: DropInfo) -> Bool {
-        model.draggedSession != target
+        info.hasItemsConforming(to: [SessionDrag.type]) && model.draggedSession != target
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -129,13 +129,11 @@ private struct PaneDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         let placement = PaneDrop(at: info.location, in: size)
         drop = nil
-        guard let provider = info.itemProviders(for: [.plainText]).first else { return false }
+        let providers = info.itemProviders(for: [SessionDrag.type])
+        guard !providers.isEmpty else { return false }
         let target = target
         let model = model
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let text = object as? String, let id = UUID(uuidString: text) else { return }
-            DispatchQueue.main.async { model.place(id, at: placement, of: target) }
-        }
+        SessionDrag.load(providers) { id in model.place(id, at: placement, of: target) }
         return true
     }
 }
@@ -191,7 +189,7 @@ private struct PaneHeader: View {
         .onHover { isHovered = $0 }
         .onDrag {
             model.draggedSession = id
-            return NSItemProvider(object: id.uuidString as NSString)
+            return SessionDrag.provider(for: id)
         }
     }
 }
@@ -243,11 +241,38 @@ private struct DividerHandle: View {
         let length = isHorizontal ? area.bounds.width : area.bounds.height
         let offset = isHorizontal ? location.x - area.bounds.minX : location.y - area.bounds.minY
         let minimum = isHorizontal ? Self.minimumPaneWidth : Self.minimumPaneHeight
-        guard length > minimum * 2 else { return area.ratio }
-        return min(max(offset, minimum), length - minimum) / length
+        let firstMinimum = minimum * CGFloat(area.firstPaneCount)
+        let secondMinimum = minimum * CGFloat(area.secondPaneCount)
+        guard length > firstMinimum + secondMinimum else { return area.ratio }
+        return min(max(offset, firstMinimum), length - secondMinimum) / length
     }
 }
 
 extension PaneCanvas {
     static let coordinateSpace = "paneCanvas"
+}
+
+/// Sessions dragged inside Harbor carry their own type, visible only to Harbor,
+/// so text dragged in from other apps never offers a place in the layout.
+enum SessionDrag {
+    static let type = UTType(exportedAs: "com.alessioromeo.harbor.session")
+
+    static func provider(for id: UUID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .ownProcess) { completion in
+            completion(Data(id.uuidString.utf8), nil)
+            return nil
+        }
+        return provider
+    }
+
+    /// Calls `receive` on the main queue with each dragged session.
+    static func load(_ providers: [NSItemProvider], receive: @escaping @MainActor (UUID) -> Void) {
+        for provider in providers {
+            _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+                guard let data, let id = UUID(uuidString: String(decoding: data, as: UTF8.self)) else { return }
+                DispatchQueue.main.async { receive(id) }
+            }
+        }
+    }
 }
