@@ -1,3 +1,4 @@
+import AppKit
 import HarborCore
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct ContentView: View {
             DetailView()
         }
         .frame(minWidth: 720, minHeight: 420)
+        .background(WindowStyler())
         .focusedSceneValue(\.archivableSession, model.selectedController?.id)
         .sheet(isPresented: $model.isSwitcherOpen) {
             QuickSwitcher()
@@ -161,5 +163,24 @@ struct MessageView: View {
         .frame(maxWidth: 440)
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// In full screen macOS paints the title bar area with the window's background colour,
+/// which would otherwise be a grey band above the terminal.
+private struct WindowStyler: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        StylingView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class StylingView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.backgroundColor = Theme.terminalBackground
+            window.titlebarAppearsTransparent = true
+        }
     }
 }
