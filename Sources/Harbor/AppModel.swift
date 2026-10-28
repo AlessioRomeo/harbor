@@ -36,6 +36,9 @@ final class AppModel {
             prepareSelectedController()
             terminalFocusRequest += 1
             markSelectedSeen()
+            if let selectedID, let session = workspace.session(selectedID) {
+                isShowingArchive = session.isArchived
+            }
         }
     }
     private var pendingCreations: Set<UUID> = []
@@ -49,6 +52,8 @@ final class AppModel {
     /// A session waiting for me to confirm that archiving may end what runs in it.
     var archiveNeedingConfirmation: UUID?
     var isSwitcherOpen = false
+    /// The sidebar lists archived sessions instead of groups.
+    var isShowingArchive = false
     var autoArchiveDays: Int {
         didSet {
             UserDefaults.standard.set(autoArchiveDays, forKey: Self.autoArchiveKey)

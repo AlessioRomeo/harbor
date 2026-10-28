@@ -6,8 +6,19 @@ struct Sidebar: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        Group {
+            if model.isShowingArchive {
+                ArchiveList()
+            } else {
+                sessionList
+            }
+        }
+        .safeAreaInset(edge: .bottom) { SidebarFooter() }
+    }
+
+    private var sessionList: some View {
         @Bindable var model = model
-        List(selection: $model.selectedID) {
+        return List(selection: $model.selectedID) {
             ForEach(model.workspace.groups) { group in
                 Section {
                     if model.workspace.liveSessions(in: group.id).isEmpty {
@@ -27,26 +38,9 @@ struct Sidebar: View {
                     GroupHeader(group: group)
                 }
             }
-            if !model.workspace.archivedSessions.isEmpty {
-                ArchiveSection()
-            }
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, 40)
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Button {
-                    model.newGroup()
-                } label: {
-                    Label("New Group", systemImage: "folder.badge.plus")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
     }
 
     private func receive(_ providers: [NSItemProvider], into groupID: UUID, at index: Int) {
@@ -135,49 +129,89 @@ private struct SessionMenu: View {
     }
 }
 
-/// Old sessions, out of the way but a click from coming back.
-private struct ArchiveSection: View {
+private struct SidebarFooter: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("archiveExpanded") private var isExpanded = false
+
+    var body: some View {
+        HStack {
+            Button {
+                model.newGroup()
+            } label: {
+                Label("New Group", systemImage: "folder.badge.plus")
+            }
+            .opacity(model.isShowingArchive ? 0 : 1)
+            Spacer()
+            let archived = model.workspace.archivedSessions.count
+            if archived > 0 || model.isShowingArchive {
+                Button {
+                    model.isShowingArchive.toggle()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: model.isShowingArchive ? "archivebox.fill" : "archivebox")
+                        if archived > 0 {
+                            Text("\(archived)").monospacedDigit()
+                        }
+                    }
+                }
+                .help(model.isShowingArchive ? "Back to sessions" : "Archived sessions")
+            }
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+/// Old sessions, out of the way but a click from coming back.
+private struct ArchiveList: View {
+    @Environment(AppModel.self) private var model
     @State private var sessionToDelete: Session?
 
     var body: some View {
-        Section(isExpanded: $isExpanded) {
-            ForEach(model.workspace.archivedSessions) { session in
-                HStack(spacing: 10) {
-                    Text(session.name)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    if let archivedAt = session.archivedAt {
-                        Text(archivedAt, format: .relative(presentation: .named, unitsStyle: .narrow))
-                            .font(.caption)
-                            .foregroundStyle(Theme.quietIndicator)
+        @Bindable var model = model
+        List(selection: $model.selectedID) {
+            Section {
+                ForEach(model.workspace.archivedSessions) { session in
+                    HStack(spacing: 10) {
+                        Text(session.name)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if let archivedAt = session.archivedAt {
+                            Text(archivedAt, format: .relative(presentation: .named, unitsStyle: .narrow))
+                                .font(.caption)
+                                .foregroundStyle(Theme.quietIndicator)
+                        }
+                    }
+                    .padding(.vertical, 7)
+                    .tag(session.id)
+                    .contextMenu {
+                        Button("Restore") { model.restore(session.id) }
+                        Divider()
+                        Button("Delete Permanently…") { sessionToDelete = session }
                     }
                 }
-                .padding(.vertical, 5)
-                .tag(session.id)
-                .contextMenu {
-                    Button("Restore") { model.restore(session.id) }
-                    Divider()
-                    Button("Delete Permanently…") { sessionToDelete = session }
+                if model.workspace.archivedSessions.isEmpty {
+                    Text("Nothing archived")
+                        .foregroundStyle(Theme.quietIndicator)
+                        .selectionDisabled()
                 }
-            }
-        } header: {
-            HStack(spacing: 6) {
-                Image(systemName: "archivebox")
-                Text("Archived")
-                Text("\(model.workspace.archivedSessions.count)")
-                    .foregroundStyle(Theme.quietIndicator)
-            }
-            .font(.subheadline.weight(.semibold))
-            .padding(.top, 10)
-        }
-        .onChange(of: model.selectedID, initial: true) { _, id in
-            if let id, model.workspace.session(id)?.isArchived == true {
-                isExpanded = true
+            } header: {
+                Button {
+                    model.isShowingArchive = false
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                        Text("Archived")
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.subheadline.weight(.semibold))
+                .padding(.top, 10)
             }
         }
+        .listStyle(.sidebar)
+        .environment(\.defaultMinListRowHeight, 40)
         .confirmationDialog(
             "Delete “\(sessionToDelete?.name ?? "")” for good?",
             isPresented: Binding(get: { sessionToDelete != nil }, set: { if !$0 { sessionToDelete = nil } })
@@ -191,32 +225,44 @@ private struct ArchiveSection: View {
     }
 }
 
-/// A name that turns into a text field while `model.editingID` points at it.
+/// A name that is renamed in a small popover while `model.editingID` points at it.
 private struct RenamableText: View {
     @Environment(AppModel.self) private var model
     let id: UUID
     let name: String
+
+    var body: some View {
+        Text(name)
+            .lineLimit(1)
+            .popover(isPresented: isEditing, arrowEdge: .trailing) {
+                RenamePopover(name: name) { model.rename(id, to: $0) }
+            }
+    }
+
+    private var isEditing: Binding<Bool> {
+        Binding(
+            get: { model.editingID == id },
+            set: { if !$0, model.editingID == id { model.editingID = nil } }
+        )
+    }
+}
+
+private struct RenamePopover: View {
+    let name: String
+    let onSave: (String) -> Void
     @State private var draft = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        if model.editingID == id {
-            TextField("Name", text: $draft)
-                .textFieldStyle(.plain)
-                .focused($isFocused)
-                .onAppear {
-                    draft = name
-                    DispatchQueue.main.async { isFocused = true }
-                }
-                .onSubmit { model.rename(id, to: draft) }
-                .onChange(of: isFocused) { _, focused in
-                    if !focused, model.editingID == id {
-                        model.rename(id, to: draft)
-                    }
-                }
-                .onExitCommand { model.editingID = nil }
-        } else {
-            Text(name).lineLimit(1)
-        }
+        TextField("Name", text: $draft)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 220)
+            .focused($isFocused)
+            .onSubmit { onSave(draft) }
+            .padding(12)
+            .onAppear {
+                draft = name
+                DispatchQueue.main.async { isFocused = true }
+            }
     }
 }
