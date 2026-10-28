@@ -22,10 +22,19 @@ public struct OutputHistory: Sendable {
         }
     }
 
+    /// Drops everything before the line being written, the way Terminal's Clear to Start keeps the prompt.
     public mutating func clear() {
-        modesAtStart.feed(bytes)
-        bytes.removeAll()
+        let keepFrom = bytes.lastIndex(of: 0x0A).map { $0 + 1 } ?? 0
+        modesAtStart.feed(bytes[..<keepFrom])
+        bytes.removeFirst(keepFrom)
     }
+
+    /// Puts the terminal back in its default modes and marks where a new shell starts.
+    public static let newShellMarker = Array((
+        "\u{1B}[?1047l\u{1B}[?1l\u{1B}[?25h\u{1B}[?9l\u{1B}[?1000l\u{1B}[?1002l\u{1B}[?1003l\u{1B}[?1004l"
+            + "\u{1B}[?1005l\u{1B}[?1006l\u{1B}[?1015l\u{1B}[?1016l\u{1B}[?2004l\u{1B}>\u{1B}[<99u\u{1B}[0m"
+            + "\r\n\u{1B}[2m─── new shell ───\u{1B}[0m\r\n"
+    ).utf8)
 
     public func replay() -> [UInt8] {
         modesAtStart.prelude() + bytes

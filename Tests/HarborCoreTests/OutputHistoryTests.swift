@@ -29,11 +29,11 @@ struct OutputHistoryTests {
         #expect(replay.hasSuffix("\u{1B}[Hscreen"))
     }
 
-    @Test func clearKeepsTheCurrentModes() {
-        var history = OutputHistory(capacity: 100)
-        history.append(Array("\u{1B}[?2004hprompt$ ".utf8))
+    @Test func clearKeepsTheCurrentLineAndModes() {
+        var history = OutputHistory(capacity: 1000)
+        history.append(Array("\u{1B}[?2004hold output\r\nprompt$ ".utf8))
         history.clear()
-        #expect(history.replay() == Array("\u{1B}[?2004h".utf8))
+        #expect(history.replay() == Array("\u{1B}[?2004hprompt$ ".utf8))
     }
 
     @Test func boundaryPrefersEscapeOrLineFeed() {

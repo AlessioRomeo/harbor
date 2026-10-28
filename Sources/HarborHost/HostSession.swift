@@ -14,12 +14,31 @@ final class HostSession: LocalProcessDelegate, @unchecked Sendable {
     var isBeingKilled = false
     private var process: LocalProcess!
     private let onExit: (HostSession) -> Void
+    private let queue: DispatchQueue
 
-    init(id: UUID, size: TerminalSize, queue: DispatchQueue, onExit: @escaping (HostSession) -> Void) {
+    /// `restoredOutput` is what an earlier shell of this session left, shown above the new one.
+    init(id: UUID, size: TerminalSize, restoredOutput: [UInt8]?, queue: DispatchQueue, onExit: @escaping (HostSession) -> Void) {
         self.id = id
         self.size = size
+        self.queue = queue
         self.onExit = onExit
+        if let restoredOutput {
+            history.append(restoredOutput)
+            history.append(OutputHistory.newShellMarker)
+        }
         process = LocalProcess(delegate: self, dispatchQueue: queue)
+    }
+
+    /// Starts a new shell in place of one that exited, keeping the history and the attached client.
+    func restart(with launcher: ShellLauncher, size newSize: TerminalSize) {
+        precondition(hasExited, "restart needs an exited shell")
+        history.append(OutputHistory.newShellMarker)
+        attached?.send(Frame(.output, payload: OutputHistory.newShellMarker))
+        hasExited = false
+        exitCode = nil
+        size = newSize
+        process = LocalProcess(delegate: self, dispatchQueue: queue)
+        start(with: launcher)
     }
 
     func start(with launcher: ShellLauncher) {
@@ -51,6 +70,17 @@ final class HostSession: LocalProcessDelegate, @unchecked Sendable {
 
     func clearHistory() {
         history.clear()
+        requestRedraw()
+    }
+
+    /// The kernel only signals a size change, so a client that attaches at the same size
+    /// asks the foreground program (zsh, claude) to repaint this way.
+    func requestRedraw() {
+        guard !hasExited else { return }
+        let foreground = tcgetpgrp(process.childfd)
+        if foreground > 0 {
+            killpg(foreground, SIGWINCH)
+        }
     }
 
     /// Interactive shells ignore SIGTERM, so hang up the shell's process group and the

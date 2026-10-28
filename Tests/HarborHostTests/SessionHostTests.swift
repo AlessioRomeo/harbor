@@ -160,6 +160,69 @@ final class SessionHostTests {
         #expect(try exited.decode(Exited.self) == Exited(exitCode: 3))
     }
 
+    @Test func attachingAsksTheForegroundProgramToRedraw() throws {
+        let control = try connect()
+        let id = try createSession(on: control)
+        let first = try connect(attach: id)
+        try type("sh -c 'trap \"echo redraw-$((1+1))\" WINCH; echo ready-$((2+2)); while :; do sleep 0.1; done'\n", into: first)
+        _ = try readOutput(from: first, until: "ready-4")
+        first.close()
+
+        let second = try connect(attach: id)
+        _ = try readOutput(from: second, until: "redraw-2")
+        try second.send(Frame(.input, payload: [0x03]))
+    }
+
+    @Test func restartsAnEndedShellInPlace() throws {
+        let control = try connect()
+        let id = try createSession(on: control)
+        let session = try connect(attach: id)
+        try type("echo before-$((1+1)); exit\n", into: session)
+        try waitForStatus(on: control) { $0.first { $0.id == id }?.activity == .ended(exitCode: 0) }
+
+        try control.send(.create(id: id, size: size))
+        try waitForStatus(on: control) { $0.first { $0.id == id }?.activity == .idle }
+        try type("echo after-$((2+2))\n", into: session)
+        _ = try readOutput(from: session, until: "after-4")
+
+        let replay = try connect(attach: id).receive(timeout: 5)
+        let text = String(decoding: replay.payload, as: UTF8.self)
+        #expect(text.contains("before-2"))
+        #expect(text.contains("new shell"))
+        #expect(text.contains("after-4"))
+    }
+
+    @Test func restoresSavedOutputAboveANewShell() throws {
+        let control = try connect()
+        let id = try createSession(on: control)
+        let first = try connect(attach: id)
+        try type("echo kept-$((3+3))\n", into: first)
+        _ = try readOutput(from: first, until: "kept-6")
+        try control.send(.kill(id: id, saveOutput: true))
+        try waitForStatus(on: control) { !$0.contains { $0.id == id } }
+
+        try control.send(.create(id: id, size: size))
+        try waitForStatus(on: control) { $0.contains { $0.id == id } }
+        let replay = try connect(attach: id).receive(timeout: 5)
+        let text = String(decoding: replay.payload, as: UTF8.self)
+        #expect(text.contains("kept-6"))
+        #expect(text.contains("new shell"))
+        #expect(!FileManager.default.fileExists(atPath: paths.savedOutput(for: id).path))
+    }
+
+    @Test func refusesToCreateARunningSessionAgain() throws {
+        let control = try connect()
+        let id = try createSession(on: control)
+        try control.send(.create(id: id, size: size))
+        let deadline = Date().addingTimeInterval(5)
+        var failure: Failure?
+        while failure == nil, Date() < deadline {
+            let frame = try control.receive(timeout: max(0, deadline.timeIntervalSinceNow))
+            if frame.type == .failure { failure = try frame.decode(Failure.self) }
+        }
+        #expect(failure?.message.contains("already running") == true)
+    }
+
     @Test func newestAttachReplacesTheOldOne() throws {
         let control = try connect()
         let id = try createSession(on: control)

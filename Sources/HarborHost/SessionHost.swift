@@ -21,6 +21,7 @@ public final class SessionHost: @unchecked Sendable {
     private var statusTimer: DispatchSourceTimer?
     private var sessions: [UUID: HostSession] = [:]
     private var dyingSessions: [UUID: HostSession] = [:]
+    private var createWhenGone: [UUID: TerminalSize] = [:]
     private var clients: [UUID: ClientConnection] = [:]
     private var lastStatuses: [SessionStatus] = []
 
@@ -148,18 +149,24 @@ public final class SessionHost: @unchecked Sendable {
         if session.hasExited {
             client.send(try .json(.exited, Exited(exitCode: session.exitCode)))
         }
+        session.requestRedraw()
     }
 
     private func perform(_ request: HostRequest, for client: ClientConnection) throws {
         switch request {
         case .create(let id, let size):
-            guard sessions[id] == nil, dyingSessions[id] == nil else {
-                throw Failure("Session \(id) already exists")
+            if let existing = sessions[id] {
+                guard existing.hasExited else { throw Failure("Session \(id) is already running") }
+                existing.restart(with: launcher, size: size)
+                break
             }
-            let session = HostSession(id: id, size: size, queue: queue) { [unowned self] in sessionExited($0) }
-            sessions[id] = session
-            session.start(with: launcher)
+            guard dyingSessions[id] == nil else {
+                createWhenGone[id] = size
+                break
+            }
+            startSession(id, size: size)
         case .kill(let id, let saveOutput):
+            createWhenGone[id] = nil
             guard let session = sessions.removeValue(forKey: id) else { return }
             if saveOutput {
                 self.saveOutput(of: session)
@@ -180,9 +187,21 @@ public final class SessionHost: @unchecked Sendable {
         publishStatusIfChanged()
     }
 
+    private func startSession(_ id: UUID, size: TerminalSize) {
+        let session = HostSession(id: id, size: size, restoredOutput: takeSavedOutput(of: id), queue: queue) { [unowned self] in
+            sessionExited($0)
+        }
+        sessions[id] = session
+        session.start(with: launcher)
+    }
+
     private func sessionExited(_ session: HostSession) {
         if session.isBeingKilled {
             dyingSessions[session.id] = nil
+            if let size = createWhenGone.removeValue(forKey: session.id) {
+                startSession(session.id, size: size)
+                publishStatusIfChanged()
+            }
             return
         }
         if let frame = try? Frame.json(.exited, Exited(exitCode: session.exitCode)) {
@@ -196,6 +215,20 @@ public final class SessionHost: @unchecked Sendable {
             try Data(session.history.replay()).write(to: paths.savedOutput(for: session.id), options: .atomic)
         } catch {
             Self.logger.error("Could not save output of \(session.id): \(String(describing: error))")
+        }
+    }
+
+    /// Output saved when the session was archived or the host stopped; the new shell continues below it.
+    private func takeSavedOutput(of id: UUID) -> [UInt8]? {
+        let url = paths.savedOutput(for: id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let output = try Data(contentsOf: url)
+            try FileManager.default.removeItem(at: url)
+            return Array(output)
+        } catch {
+            Self.logger.error("Could not restore output of \(id): \(String(describing: error))")
+            return nil
         }
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-public let protocolVersion = 1
+public let protocolVersion = 2
 
 public struct Hello: Codable, Sendable {
     public var version: Int
