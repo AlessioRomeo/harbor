@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="#tour"><img src="docs/poster.png" alt="Harbor: sessions grouped in a sidebar, four terminals side by side" width="900"></a>
+  <img src="docs/poster.png" alt="Harbor: sessions grouped in a sidebar, four terminals side by side" width="900">
 </p>
 
 <h1 align="center">Harbor</h1>
@@ -8,10 +8,6 @@
   <b>A calm home for your terminal sessions.</b><br>
   A native macOS app that turns twenty scattered terminal tabs into one window: named sessions in groups,<br>
   shells that keep running when you quit, and a clear signal the moment Claude Code needs you.
-</p>
-
-<p align="center">
-  <a href="#tour">▶ See the 30-second tour</a>
 </p>
 
 ---
