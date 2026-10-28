@@ -10,10 +10,6 @@
   shells that keep running when you quit, and a clear signal the moment Claude Code needs you.
 </p>
 
----
-
-## Tour
-
 <p align="center">
   <img src="docs/tour.gif" alt="A 30-second tour of Harbor: grouped sessions, Claude notifications, split panes, sessions that survive quitting, and the session switcher" width="800">
 </p>
