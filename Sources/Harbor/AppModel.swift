@@ -49,7 +49,7 @@ final class AppModel {
             if let selectedID, let session = workspace.session(selectedID) {
                 isShowingArchive = session.isArchived
             }
-            if let selectedID, !(sidebarSelection.count > 1 && sidebarSelection.contains(selectedID)) {
+            if let selectedID, gridGroupID == nil, !(sidebarSelection.count > 1 && sidebarSelection.contains(selectedID)) {
                 sidebarSelection = [selectedID]
             }
         }
@@ -67,21 +67,27 @@ final class AppModel {
     /// Sessions waiting for me to confirm they should go for good.
     var deletionNeedingConfirmation: Set<UUID> = []
     /// What's highlighted in the sidebar. One session there is the selection; several (⌘- or
-    /// ⇧-click) are only gathered to archive, move, restore or delete together.
+    /// ⇧-click) are only gathered to archive, move, restore or delete together. Nothing is
+    /// highlighted while a group is shown as a grid, and picking a session then shows it alone.
     var sidebarSelection: Set<UUID> = [] {
         didSet {
-            if sidebarSelection.count == 1, let only = sidebarSelection.first, only != selectedID {
+            guard sidebarSelection.count == 1, let only = sidebarSelection.first else { return }
+            if gridGroupID != nil {
+                showAlone(only)
+            } else if only != selectedID {
                 selectedID = only
             }
         }
     }
+    /// The group whose sessions fill the panes as a grid, until the panes are rearranged.
+    private(set) var gridGroupID: UUID?
     var isSwitcherOpen = false
     /// The sidebar lists archived sessions instead of groups. Switching starts a fresh selection,
     /// so nothing highlighted in one list can be acted on from the other.
     var isShowingArchive = false {
         didSet {
             guard isShowingArchive != oldValue else { return }
-            sidebarSelection = selectedID.map { [$0] } ?? []
+            sidebarSelection = gridGroupID == nil ? selectedID.map { [$0] } ?? [] : []
         }
     }
     var autoArchiveDays: Int {
@@ -144,9 +150,14 @@ final class AppModel {
         var updated = workspace
         let result = try change(&updated)
         guard updated != workspace else { return result }
+        let isLayoutChanged = updated.layout != workspace.layout
         workspace = updated
         if paneCount < 2 {
             isZoomed = false
+        }
+        if isLayoutChanged, gridGroupID != nil {
+            gridGroupID = nil
+            sidebarSelection = selectedID.map { [$0] } ?? []
         }
         guard storageError == nil else { return result }
         do {
@@ -318,13 +329,16 @@ final class AppModel {
     /// Groups folded away in the sidebar, remembered across launches.
     private(set) var collapsedGroups: Set<UUID> = Set(
         (UserDefaults.standard.stringArray(forKey: AppModel.collapsedGroupsKey) ?? []).compactMap(UUID.init(uuidString:))
-    )
+    ) {
+        didSet {
+            UserDefaults.standard.set(collapsedGroups.map(\.uuidString), forKey: Self.collapsedGroupsKey)
+        }
+    }
 
     func toggleCollapsed(_ groupID: UUID) {
         if collapsedGroups.remove(groupID) == nil {
             collapsedGroups.insert(groupID)
         }
-        UserDefaults.standard.set(collapsedGroups.map(\.uuidString), forKey: Self.collapsedGroupsKey)
     }
 
     /// Whether any live session of the group needs me, for a folded group's title.
@@ -345,17 +359,30 @@ final class AppModel {
         selectedID = id
     }
 
-    /// The group's live sessions as an even grid, the focused one keeping the keyboard if it's among them.
-    func showGroupAsGrid(_ groupID: UUID) {
+    /// The group's live sessions as an even grid. The keyboard goes to `preferred`, else stays with
+    /// the selected session if it's among them.
+    func showGroupAsGrid(_ groupID: UUID, focusing preferred: UUID? = nil) {
         let ids = workspace.liveSessions(in: groupID).map(\.id)
         guard let grid = PaneLayout.grid(ids, aspectRatio: paneAreaAspectRatio) else { return }
-        let focus = selectedID.flatMap { grid.contains($0) ? $0 : nil } ?? grid.sessionIDs.first
+        let focus = [preferred, selectedID].compactMap { $0 }.first(where: grid.contains) ?? grid.sessionIDs.first
         isZoomed = false
         update { $0.setLayout(grid, focus: focus) }
         if let focus {
             selectedID = focus
         }
+        gridGroupID = groupID
+        sidebarSelection = []
         prepareVisibleControllers()
+    }
+
+    /// Leaves the grid for one session on its own, as picking it in the sidebar does.
+    private func showAlone(_ id: UUID) {
+        if workspace.session(id)?.isArchived == false {
+            gridGroupID = nil
+            isZoomed = false
+            update { $0.setLayout(.pane(id), focus: id) }
+        }
+        selectedID = id
     }
 
     /// Roughly the shape of the area the panes fill: the window in front, which is where the
@@ -499,7 +526,12 @@ final class AppModel {
         var created: UUID?
         attempt { created = try $0.addSession(named: Self.newSessionName, to: group) }
         guard let created else { return }
-        selectedID = created
+        collapsedGroups.remove(group)
+        if gridGroupID == group {
+            showGroupAsGrid(group, focusing: created)
+        } else {
+            selectedID = created
+        }
         editingID = created
     }
 
