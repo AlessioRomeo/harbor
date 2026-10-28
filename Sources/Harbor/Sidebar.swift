@@ -13,9 +13,12 @@ struct Sidebar: View {
                 sessionList
             }
         }
-        .contentMargins(.top, model.isFullScreen ? PaneCanvas.titleBarHeight : 0, for: .scrollContent)
+        .safeAreaPadding(.top, model.isFullScreen ? Self.fullScreenTopMargin : 0)
         .safeAreaInset(edge: .bottom) { SidebarFooter() }
     }
+
+    /// Clears the sidebar button's row with the same gap the window's toolbar leaves outside full screen.
+    private static let fullScreenTopMargin: CGFloat = PaneCanvas.titleBarHeight + 24
 
     private var sessionList: some View {
         @Bindable var model = model
