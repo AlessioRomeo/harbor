@@ -21,14 +21,17 @@ final class TerminalController: NSObject, TerminalViewDelegate {
     @ObservationIgnored var onLayout: (() -> Void)?
     @ObservationIgnored var onRestartRequest: (() -> Void)?
     @ObservationIgnored var onInput: (() -> Void)?
+    /// A click in the terminal: its pane should take the focus.
+    @ObservationIgnored var onActivate: (() -> Void)?
     @ObservationIgnored private var hostConnection: HostConnection?
     @ObservationIgnored private var isReplaying = false
 
     init(id: UUID, fontSize: CGFloat) {
         self.id = id
-        view = .harbor(fontSize: fontSize)
+        view = HarborTerminalView.harbor(fontSize: fontSize)
         super.init()
         view.terminalDelegate = self
+        (view as? HarborTerminalView)?.onMouseDown = { [weak self] in self?.onActivate?() }
     }
 
     func attach(socketPath: String) {
@@ -151,12 +154,22 @@ final class TerminalController: NSObject, TerminalViewDelegate {
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
+/// SwiftTerm doesn't let subclasses see focus changes, but it does let them see clicks.
+final class HarborTerminalView: TerminalView {
+    var onMouseDown: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        onMouseDown?()
+        super.mouseDown(with: event)
+    }
+}
+
 extension TerminalView {
     private static let scrollbackLines = 10_000
 
     /// A terminal view set up the way every Harbor terminal looks and behaves.
     static func harbor(fontSize: CGFloat) -> TerminalView {
-        let view = TerminalView(
+        let view = HarborTerminalView(
             frame: NSRect(x: 0, y: 0, width: 800, height: 600),
             font: Theme.terminalFont(size: fontSize),
             options: TerminalOptions(scrollback: scrollbackLines)

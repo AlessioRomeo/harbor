@@ -15,6 +15,7 @@ struct TerminalPane: NSViewRepresentable {
 
     func updateNSView(_ container: TerminalContainerView, context: Context) {
         container.topInset = topInset
+        container.isFocusTarget = focusRequest != nil
         container.show(controller.view)
         if let focusRequest {
             container.focus(request: focusRequest)
@@ -28,6 +29,8 @@ final class TerminalContainerView: NSView {
     }
     /// Off for read-only output, so keys like Return reach the window's buttons.
     var takesFocus = true
+    /// Only the focused pane takes the keyboard when it appears; with several panes, the others must not.
+    var isFocusTarget = true
     private var terminalView: TerminalView?
     private var handledFocusRequest: Int?
 
@@ -47,12 +50,16 @@ final class TerminalContainerView: NSView {
         terminalView = view
         addSubview(view)
         needsLayout = true
-        focusTerminal()
+        if isFocusTarget {
+            focusTerminal()
+        }
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        focusTerminal()
+        if isFocusTarget {
+            focusTerminal()
+        }
     }
 
     func focus(request: Int) {

@@ -7,7 +7,13 @@ public struct HarborPaths: Sendable {
         self.directory = directory
     }
 
+    /// Set to run a separate Harbor, with its own host and sessions, for trying out a build.
+    public static let dataDirectoryVariable = "HARBOR_DATA_DIR"
+
     public static var standard: HarborPaths {
+        if let override = ProcessInfo.processInfo.environment[dataDirectoryVariable], !override.isEmpty {
+            return HarborPaths(directory: URL(fileURLWithPath: override, isDirectory: true))
+        }
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return HarborPaths(directory: support.appendingPathComponent("Harbor", isDirectory: true))
     }

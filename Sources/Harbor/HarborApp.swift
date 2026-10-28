@@ -64,6 +64,28 @@ struct HarborCommands: Commands {
             }
             .keyboardShortcut("w")
         }
+        CommandMenu("Layout") {
+            Button("Split Right") { model.splitFocusedPane(toward: .right) }
+                .keyboardShortcut("d")
+            Button("Split Down") { model.splitFocusedPane(toward: .bottom) }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+            Button("Take Pane Off Screen") { model.closeFocusedPane() }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+                .disabled(model.paneCount < 2)
+            Divider()
+            Button("Focus Left") { model.moveFocus(toward: .left) }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+            Button("Focus Right") { model.moveFocus(toward: .right) }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+            Button("Focus Up") { model.moveFocus(toward: .top) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            Button("Focus Down") { model.moveFocus(toward: .bottom) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            Divider()
+            Button("Even Out Panes") { model.evenOutPanes() }
+                .keyboardShortcut("=", modifiers: [.command, .control])
+                .disabled(model.paneCount < 2)
+        }
         CommandGroup(replacing: .printItem) {}
         CommandGroup(after: .pasteboard) {
             Divider()

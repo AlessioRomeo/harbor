@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import HarborCore
 
 public enum ShellLauncherError: Error {
     case noPasswordEntry
@@ -8,7 +9,7 @@ public enum ShellLauncherError: Error {
 public struct ShellLauncher: Sendable {
     public static let sessionIDVariable = "HARBOR_SESSION_ID"
 
-    private static let appOnlyVariables: Set<String> = ["__CFBundleIdentifier", "TERM_SESSION_ID", "SHELL_SESSION_ID"]
+    private static let appOnlyVariables: Set<String> = ["__CFBundleIdentifier", "TERM_SESSION_ID", "SHELL_SESSION_ID", HarborPaths.dataDirectoryVariable]
     private static let appOnlyPrefixes = ["XPC_", "__CF"]
 
     public var executable: String
@@ -40,6 +41,9 @@ public struct ShellLauncher: Sendable {
         environment["TERM"] = "xterm-256color"
         environment["COLORTERM"] = "truecolor"
         environment["TERM_PROGRAM"] = "Harbor"
+        // zsh pads its partial-line mark to the width at the time; replayed into a pane of another
+        // width the padding wraps and leaves stray marks. An empty mark keeps replays clean.
+        environment["PROMPT_EOL_MARK"] = environment["PROMPT_EOL_MARK"] ?? ""
         if environment["LANG"] == nil {
             environment["LANG"] = "en_US.UTF-8"
         }

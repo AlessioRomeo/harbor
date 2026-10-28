@@ -12,6 +12,8 @@ enum Theme {
     static let running = Color(nsColor: NSColor(hex: 0x7AA2D6))
     static let attention = Color(nsColor: NSColor(hex: 0xE8B464))
     static let failure = Color(nsColor: NSColor(hex: 0xE07A7A))
+    static let paneHeader = Color(nsColor: NSColor(hex: 0x1C1D21))
+    static let divider = Color(nsColor: NSColor(hex: 0x2C2E34))
 
     static let terminalPadding: CGFloat = 14
     static let defaultFontSize: CGFloat = 13

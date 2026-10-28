@@ -43,12 +43,8 @@ private struct DetailView: View {
                 MessageView(title: "Harbor can't use its sessions file", message: error)
             } else if let session = model.selectedID.flatMap({ model.workspace.session($0) }), session.isArchived {
                 ArchivedSessionView(session: session)
-            } else if let controller = model.selectedController {
-                TerminalPane(controller: controller, focusRequest: model.editingID == nil ? model.terminalFocusRequest : nil, topInset: 22)
-                    .ignoresSafeArea()
-                if model.host.state == .connected {
-                    ConnectionNotice(controller: controller)
-                }
+            } else if let layout = model.workspace.layout {
+                PaneCanvas(layout: layout)
             } else {
                 MessageView(title: "No session selected", message: "Pick one in the sidebar, or press ⌘T for a new one.")
             }
@@ -66,7 +62,7 @@ private struct DetailView: View {
     }
 }
 
-private struct ConnectionNotice: View {
+struct ConnectionNotice: View {
     let controller: TerminalController
 
     var body: some View {

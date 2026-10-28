@@ -29,11 +29,16 @@ final class AppModel {
     }
     /// Bumped whenever the selected terminal should take the keyboard.
     private(set) var terminalFocusRequest = 0
+    /// The session with the keyboard: the focused pane, or an archived session being looked at.
+    /// Selecting a live session that isn't on screen puts it in the focused pane's place.
     var selectedID: UUID? {
         didSet {
             guard selectedID != oldValue else { return }
             UserDefaults.standard.set(selectedID?.uuidString, forKey: Self.selectionKey)
-            prepareSelectedController()
+            if let selectedID {
+                bringOnScreen(selectedID)
+            }
+            prepareVisibleControllers()
             terminalFocusRequest += 1
             markSelectedSeen()
             if let selectedID, let session = workspace.session(selectedID) {
@@ -95,8 +100,15 @@ final class AppModel {
             storageError = "Harbor couldn't read its sessions file (\(host.paths.workspace.path)): \(error.localizedDescription). Nothing will be saved until it's fixed or moved away."
             return
         }
-        let stored = UserDefaults.standard.string(forKey: Self.selectionKey).flatMap(UUID.init(uuidString:))
-        selectedID = stored.flatMap { workspace.session($0) }.map(\.id) ?? workspace.liveSessions.first?.id
+        update { $0.pruneLayout() }
+        let stored = UserDefaults.standard.string(forKey: Self.selectionKey)
+            .flatMap(UUID.init(uuidString:))
+            .flatMap { workspace.session($0) }
+        if let stored, stored.isArchived || workspace.layout == nil || workspace.layout?.contains(stored.id) == true {
+            selectedID = stored.id
+        } else {
+            selectedID = workspace.focusedPane ?? workspace.liveSessions.first?.id
+        }
     }
 
     @discardableResult
@@ -169,15 +181,21 @@ final class AppModel {
         controllers.removeAll()
         pendingCreations.removeAll()
         host.connect()
-        prepareSelectedController()
+        prepareVisibleControllers()
     }
 
     var selectedController: TerminalController? {
         selectedID.flatMap { controllers[$0] }
     }
 
-    private func prepareSelectedController() {
-        guard let id = selectedID, let session = workspace.session(id), !session.isArchived, controllers[id] == nil else { return }
+    /// Every pane on screen needs its terminal; ones that left the screen keep theirs, still attached.
+    private func prepareVisibleControllers() {
+        for id in workspace.layout?.sessionIDs ?? [] where controllers[id] == nil {
+            makeController(for: id)
+        }
+    }
+
+    private func makeController(for id: UUID) {
         let controller = TerminalController(id: id, fontSize: fontSize)
         controller.onLayout = { [weak self, weak controller] in
             guard let self, let controller else { return }
@@ -188,7 +206,66 @@ final class AppModel {
             host.send(.create(id: controller.id, size: size))
         }
         controller.onInput = { [weak self] in self?.noteActivity(id) }
+        controller.onActivate = { [weak self] in self?.selectedID = id }
         controllers[id] = controller
+    }
+
+    // MARK: Panes
+
+    var paneCount: Int {
+        workspace.layout?.sessionIDs.count ?? 0
+    }
+
+    private func bringOnScreen(_ id: UUID) {
+        guard let session = workspace.session(id), !session.isArchived else { return }
+        update { workspace in
+            if workspace.layout?.contains(id) == true {
+                workspace.focusPane(id)
+            } else if let layout = workspace.layout, let focused = workspace.focusedPane {
+                workspace.setLayout(layout.replacing(focused, with: id), focus: id)
+            } else {
+                workspace.setLayout(.pane(id), focus: id)
+            }
+        }
+    }
+
+    /// A new session beside the focused pane, in the same group, named straight away.
+    func splitFocusedPane(toward edge: PaneEdge) {
+        guard let focused = workspace.focusedPane, let layout = workspace.layout, let group = workspace.session(focused)?.groupID else {
+            newSession()
+            return
+        }
+        var created: UUID?
+        attempt { workspace in
+            let id = try workspace.addSession(named: Self.newSessionName, to: group)
+            workspace.setLayout(layout.splitting(focused, with: id, at: edge), focus: id)
+            created = id
+        }
+        guard let created else { return }
+        selectedID = created
+        editingID = created
+    }
+
+    /// Takes the focused pane off screen; its session keeps running in the sidebar.
+    func closeFocusedPane() {
+        guard paneCount > 1, let focused = workspace.focusedPane else { return }
+        update { $0.removeFromLayout(focused) }
+        selectedID = workspace.focusedPane
+    }
+
+    func moveFocus(toward edge: PaneEdge) {
+        guard let focused = workspace.focusedPane, let next = workspace.layout?.neighbour(of: focused, toward: edge) else { return }
+        selectedID = next
+    }
+
+    func evenOutPanes() {
+        guard let layout = workspace.layout else { return }
+        update { $0.setLayout(layout.evened) }
+    }
+
+    func setSplitRatio(_ ratio: Double, at path: [Bool]) {
+        guard let layout = workspace.layout else { return }
+        update { $0.setLayout(layout.settingRatio(ratio, at: path)) }
     }
 
     func indicator(of id: UUID) -> SessionIndicator {
@@ -364,15 +441,15 @@ final class AppModel {
     func archive(_ id: UUID) {
         archiveNeedingConfirmation = nil
         guard let session = workspace.session(id), !session.isArchived else { return }
-        if selectedID == id {
-            selectedID = neighbour(of: session)
-        }
         controllers.removeValue(forKey: id)?.detach()
         pendingCreations.remove(id)
         if host.activities[id] != nil {
             host.send(.kill(id: id, saveOutput: true))
         }
         update { $0.archive(id, at: Date()) }
+        if selectedID == id {
+            selectedID = workspace.focusedPane ?? neighbour(of: session)
+        }
         notifier.withdraw(sessionID: id)
         refreshAttention()
     }
@@ -385,14 +462,15 @@ final class AppModel {
     }
 
     func deletePermanently(_ id: UUID) {
-        if selectedID == id {
-            selectedID = workspace.session(id).flatMap(neighbour(of:))
-        }
+        let session = workspace.session(id)
         controllers.removeValue(forKey: id)?.detach()
         if host.activities[id] != nil {
             host.send(.kill(id: id, saveOutput: false))
         }
         update { $0.deleteSession(id) }
+        if selectedID == id {
+            selectedID = workspace.focusedPane ?? session.flatMap(neighbour(of:))
+        }
         do {
             let saved = host.paths.savedOutput(for: id)
             if FileManager.default.fileExists(atPath: saved.path) {
