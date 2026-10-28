@@ -43,8 +43,15 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, 40)
+        .environment(\.defaultMinListRowHeight, SidebarMetrics.rowHeight)
     }
+}
+
+/// Rows sit 32 pt tall with the name inset evenly; group titles get room above and below.
+private enum SidebarMetrics {
+    static let rowHeight: CGFloat = 32
+    static let rowInset = EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4)
+    static let headerInset = EdgeInsets(top: 16, leading: 6, bottom: 6, trailing: 4)
 }
 
 private struct GroupHeader: View {
@@ -54,7 +61,7 @@ private struct GroupHeader: View {
     var body: some View {
         RenamableText(id: group.id, name: group.name)
             .font(.subheadline.weight(.semibold))
-            .padding(.top, 10)
+            .padding(SidebarMetrics.headerInset)
             .contextMenu {
                 Button("New Session") { model.newSession(in: group.id) }
                 Button("Show as Grid") { model.showGroupAsGrid(group.id) }
@@ -89,7 +96,7 @@ private struct EmptyGroupRow: View {
             .foregroundStyle(Theme.quietIndicator)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 6)
+        .padding(SidebarMetrics.rowInset)
         .selectionDisabled()
     }
 }
@@ -104,7 +111,7 @@ private struct SessionRow: View {
             Spacer(minLength: 4)
             StatusIndicator(indicator: model.indicator(of: session.id))
         }
-        .padding(.vertical, 7)
+        .padding(SidebarMetrics.rowInset)
     }
 }
 
@@ -179,7 +186,7 @@ private struct ArchiveList: View {
                                 .foregroundStyle(Theme.quietIndicator)
                         }
                     }
-                    .padding(.vertical, 7)
+                    .padding(SidebarMetrics.rowInset)
                     .tag(session.id)
                     .contextMenu {
                         Button("Restore") { model.restore(session.id) }
@@ -203,11 +210,11 @@ private struct ArchiveList: View {
                 }
                 .buttonStyle(.plain)
                 .font(.subheadline.weight(.semibold))
-                .padding(.top, 10)
+                .padding(SidebarMetrics.headerInset)
             }
         }
         .listStyle(.sidebar)
-        .environment(\.defaultMinListRowHeight, 40)
+        .environment(\.defaultMinListRowHeight, SidebarMetrics.rowHeight)
         .confirmationDialog(
             "Delete “\(sessionToDelete?.name ?? "")” for good?",
             isPresented: Binding(get: { sessionToDelete != nil }, set: { if !$0 { sessionToDelete = nil } })
