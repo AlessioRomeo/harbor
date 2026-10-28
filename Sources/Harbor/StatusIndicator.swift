@@ -1,36 +1,36 @@
+import HarborCore
 import SwiftUI
 
-/// What a session is doing, as the sidebar shows it at a glance.
-enum SessionState: Equatable {
-    case notStarted
-    case idle
-    case running
-    case ended
-
+extension SessionIndicator {
     var label: String {
         switch self {
         case .notStarted: "Not started"
         case .idle: "Idle"
         case .running: "Running"
         case .ended: "Shell ended"
+        case .claudeWorking: "Claude is working"
+        case .claudeIdle: "Claude is open"
+        case .needsAttention(.finished): "Claude finished"
+        case .needsAttention(.waiting): "Claude is waiting for you"
+        case .needsAttention(.failed): "Claude stopped with an error"
         }
     }
 }
 
 struct StatusIndicator: View {
-    let status: SessionState
+    let indicator: SessionIndicator
 
     var body: some View {
         symbol
-            .frame(width: 14, height: 14)
-            .help(status.label)
-            .accessibilityLabel(status.label)
-            .animation(.easeInOut(duration: 0.25), value: status)
+            .frame(width: 16, height: 16)
+            .help(indicator.label)
+            .accessibilityLabel(indicator.label)
+            .animation(.easeInOut(duration: 0.25), value: indicator)
     }
 
     @ViewBuilder
     private var symbol: some View {
-        switch status {
+        switch indicator {
         case .notStarted:
             Color.clear
         case .idle:
@@ -45,6 +45,20 @@ struct StatusIndicator: View {
             Image(systemName: "power")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.quietIndicator)
+        case .claudeWorking:
+            Image(systemName: "sparkle")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.running)
+                .symbolEffect(.pulse, options: .repeating)
+        case .claudeIdle:
+            Image(systemName: "sparkle")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.quietIndicator)
+        case .needsAttention(let reason):
+            Circle()
+                .fill(reason == .failed ? Theme.failure : Theme.attention)
+                .frame(width: 10, height: 10)
+                .shadow(color: (reason == .failed ? Theme.failure : Theme.attention).opacity(0.6), radius: 4)
         }
     }
 }

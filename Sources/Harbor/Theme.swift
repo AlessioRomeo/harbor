@@ -10,6 +10,8 @@ enum Theme {
     static let secondaryText = Color(nsColor: NSColor(hex: 0x8B8F98))
     static let quietIndicator = Color(nsColor: NSColor(hex: 0x6E727B))
     static let running = Color(nsColor: NSColor(hex: 0x7AA2D6))
+    static let attention = Color(nsColor: NSColor(hex: 0xE8B464))
+    static let failure = Color(nsColor: NSColor(hex: 0xE07A7A))
 
     static let terminalPadding: CGFloat = 14
     static let defaultFontSize: CGFloat = 13

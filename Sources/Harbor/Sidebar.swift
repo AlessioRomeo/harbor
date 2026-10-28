@@ -109,7 +109,7 @@ private struct SessionRow: View {
         HStack(spacing: 10) {
             RenamableText(id: session.id, name: session.name)
             Spacer(minLength: 4)
-            StatusIndicator(status: model.state(of: session.id))
+            StatusIndicator(indicator: model.indicator(of: session.id))
         }
         .padding(.vertical, 7)
     }

@@ -12,6 +12,8 @@ public struct Session: Codable, Equatable, Identifiable, Sendable {
     public var createdAt: Date
     public var lastActivityAt: Date
     public var archivedAt: Date?
+    /// When I last looked at the session; Claude's reports after this need my attention.
+    public var lastSeenAt: Date?
 
     public var isArchived: Bool { archivedAt != nil }
 }
@@ -98,7 +100,8 @@ public struct Workspace: Codable, Equatable, Sendable {
             groupID: groupID,
             createdAt: now,
             lastActivityAt: now,
-            archivedAt: nil
+            archivedAt: nil,
+            lastSeenAt: now
         )
         let lastInGroup = sessions.lastIndex { $0.groupID == groupID }
         sessions.insert(session, at: lastInGroup.map { $0 + 1 } ?? sessions.endIndex)
@@ -129,6 +132,11 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func recordActivity(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[index].lastActivityAt = max(sessions[index].lastActivityAt, date)
+    }
+
+    public mutating func markSeen(_ id: UUID, at date: Date) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[index].lastSeenAt = date
     }
 
     private static func cleaned(_ name: String, fallback: String) -> String {

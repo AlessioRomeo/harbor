@@ -14,6 +14,8 @@ public struct HarborPaths: Sendable {
 
     public var socket: URL { directory.appendingPathComponent("host.sock") }
     public var workspace: URL { directory.appendingPathComponent("workspace.json") }
+    public var claudeEvents: URL { directory.appendingPathComponent("claude", isDirectory: true) }
+    public var claudeHook: URL { directory.appendingPathComponent("claude-hook.sh") }
     public var savedOutputDirectory: URL { directory.appendingPathComponent("scrollback", isDirectory: true) }
 
     public func savedOutput(for id: UUID) -> URL {
@@ -26,5 +28,6 @@ public struct HarborPaths: Sendable {
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         try fileManager.createDirectory(at: savedOutputDirectory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: claudeEvents, withIntermediateDirectories: true)
     }
 }

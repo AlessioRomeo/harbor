@@ -32,13 +32,20 @@ final class AppModel {
             UserDefaults.standard.set(selectedID?.uuidString, forKey: Self.selectionKey)
             prepareSelectedController()
             terminalFocusRequest += 1
+            markSelectedSeen()
         }
     }
     private var pendingCreations: Set<UUID> = []
+    private(set) var claudeEvents: [UUID: ClaudeEvent] = [:]
+    private let claudeStore: ClaudeEventStore
+    private var claudeWatcher: DirectoryWatcher?
+    private var attentionIDs: Set<UUID> = []
+    private let notifier = AttentionNotifier()
 
     init(paths: HarborPaths = .standard) {
         host = HostClient(paths: paths)
         store = WorkspaceStore(url: paths.workspace)
+        claudeStore = ClaudeEventStore(directory: paths.claudeEvents)
         let stored = UserDefaults.standard.double(forKey: Self.fontSizeKey)
         fontSize = stored > 0 ? stored : Theme.defaultFontSize
     }
@@ -47,6 +54,9 @@ final class AppModel {
         loadWorkspace()
         host.onSessionsChanged = { [weak self] in self?.sessionsChanged() }
         host.connect()
+        if storageError == nil {
+            startWatchingClaude()
+        }
     }
 
     private func loadWorkspace() {
@@ -103,6 +113,7 @@ final class AppModel {
             }
             advance(controller)
         }
+        refreshAttention()
     }
 
     /// A session is created at the size its view settled on, so the shell's first prompt fits;
@@ -146,12 +157,70 @@ final class AppModel {
         controllers[id] = controller
     }
 
-    func state(of id: UUID) -> SessionState {
-        switch host.activities[id] {
-        case .idle: .idle
-        case .busy: .running
-        case .ended: .ended
-        case nil: .notStarted
+    func indicator(of id: UUID) -> SessionIndicator {
+        SessionIndicator(host: host.activities[id], claude: claudeEvents[id], lastSeen: workspace.session(id)?.lastSeenAt)
+    }
+
+    // MARK: Claude
+
+    private func startWatchingClaude() {
+        installClaudeHook()
+        claudeWatcher = DirectoryWatcher(url: host.paths.claudeEvents) { [weak self] in self?.claudeEventsChanged() }
+        if claudeWatcher == nil {
+            Self.logger.error("Can't watch \(self.host.paths.claudeEvents.path); Claude's status won't update")
+        }
+        notifier.onOpen = { [weak self] id in self?.selectedID = id }
+        notifier.start()
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.markSelectedSeen() }
+        }
+        claudeEventsChanged()
+    }
+
+    /// The hook settings point at a fixed path, so the script there follows the installed app.
+    private func installClaudeHook() {
+        guard let bundled = Bundle.main.url(forResource: "claude-hook", withExtension: "sh") else {
+            Self.logger.error("The app bundle has no claude-hook.sh")
+            return
+        }
+        do {
+            let target = host.paths.claudeHook
+            let contents = try Data(contentsOf: bundled)
+            guard (try? Data(contentsOf: target)) != contents else { return }
+            try contents.write(to: target, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: target.path)
+        } catch {
+            Self.logger.error("Could not install the Claude hook: \(String(describing: error))")
+        }
+    }
+
+    private func claudeEventsChanged() {
+        claudeEvents = claudeStore.load()
+        markSelectedSeen()
+    }
+
+    /// Looking at a session in the active app is what clears its attention.
+    private func markSelectedSeen() {
+        if NSApp.isActive, let id = selectedID, workspace.session(id) != nil {
+            update { $0.markSeen(id, at: Date()) }
+            notifier.withdraw(sessionID: id)
+        }
+        refreshAttention()
+    }
+
+    private func refreshAttention() {
+        let needing = Set(workspace.liveSessions.filter { indicator(of: $0.id).needsAttention }.map(\.id))
+        let fresh = needing.subtracting(attentionIDs)
+        attentionIDs = needing
+        notifier.setBadge(needing.count)
+        for id in fresh {
+            guard let session = workspace.session(id), case .needsAttention(let reason) = indicator(of: id) else { continue }
+            let body = switch reason {
+            case .finished: "Claude finished."
+            case .waiting: "Claude is waiting for you."
+            case .failed: "Claude stopped with an error."
+            }
+            notifier.notify(sessionID: id, title: session.name, body: body)
         }
     }
 
