@@ -57,25 +57,24 @@ private enum SidebarMetrics {
 private struct GroupHeader: View {
     @Environment(AppModel.self) private var model
     let group: SessionGroup
-
     var body: some View {
         RenamableText(id: group.id, name: group.name)
             .font(.subheadline.weight(.semibold))
             .padding(SidebarMetrics.headerInset)
-            .contextMenu {
-                Button("New Session") { model.newSession(in: group.id) }
-                Button("Show as Grid") { model.showGroupAsGrid(group.id) }
-                    .disabled(model.workspace.liveSessions(in: group.id).isEmpty)
-                Button("Rename…") { model.editingID = group.id }
-                Divider()
-                Button("Move Up") { model.moveGroup(group.id, by: -1) }
-                    .disabled(model.workspace.groups.first?.id == group.id)
-                Button("Move Down") { model.moveGroup(group.id, by: 1) }
-                    .disabled(model.workspace.groups.last?.id == group.id)
-                Divider()
-                Button("Delete Group") { model.deleteGroup(group.id) }
-                    .disabled(!model.workspace.liveSessions(in: group.id).isEmpty)
-            }
+        .contextMenu {
+            Button("New Session") { model.newSession(in: group.id) }
+            Button("Show as Grid") { model.showGroupAsGrid(group.id) }
+                .disabled(model.workspace.liveSessions(in: group.id).isEmpty)
+            Button("Rename…") { model.editingID = group.id }
+            Divider()
+            Button("Move Up") { model.moveGroup(group.id, by: -1) }
+                .disabled(model.workspace.groups.first?.id == group.id)
+            Button("Move Down") { model.moveGroup(group.id, by: 1) }
+                .disabled(model.workspace.groups.last?.id == group.id)
+            Divider()
+            Button("Delete Group") { model.deleteGroup(group.id) }
+                .disabled(!model.workspace.liveSessions(in: group.id).isEmpty)
+        }
     }
 }
 
@@ -136,13 +135,23 @@ private struct SidebarFooter: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        HStack {
-            Button {
-                model.newGroup()
-            } label: {
-                Label("New Group", systemImage: "folder.badge.plus")
+        HStack(spacing: 14) {
+            Group {
+                Button {
+                    model.newSession()
+                } label: {
+                    Label("New Session", systemImage: "plus")
+                }
+                .help("New session (⌘T)")
+                Button {
+                    model.newGroup()
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .help("New group (⇧⌘N)")
             }
             .opacity(model.isShowingArchive ? 0 : 1)
+            .disabled(model.isShowingArchive)
             Spacer()
             let archived = model.workspace.archivedSessions.count
             if archived > 0 || model.isShowingArchive {
