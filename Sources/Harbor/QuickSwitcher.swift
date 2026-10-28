@@ -1,3 +1,4 @@
+import AppKit
 import HarborCore
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct QuickSwitcher: View {
     @State private var query = ""
     @State private var highlighted = 0
     @FocusState private var isFieldFocused: Bool
+    @State private var outsideClickMonitor: Any?
 
     private var results: [SearchResult] {
         Array(model.workspace.search(query).prefix(50))
@@ -67,6 +69,21 @@ struct QuickSwitcher: View {
             return .handled
         }
         .onExitCommand { dismiss() }
+        .onAppear { outsideClickMonitor = closingOnOutsideClick() }
+        .onDisappear {
+            outsideClickMonitor.map(NSEvent.removeMonitor)
+            outsideClickMonitor = nil
+        }
+    }
+
+    /// A click anywhere in Harbor outside the switcher closes it, as Escape does. The click itself
+    /// only closes the switcher, the way clicking outside a popover does.
+    private func closingOnOutsideClick() -> Any? {
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [dismiss] event in
+            guard event.window?.sheetParent == nil else { return event }
+            dismiss()
+            return nil
+        }
     }
 
     private func open() {
