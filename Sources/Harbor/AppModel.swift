@@ -231,8 +231,19 @@ final class AppModel {
         markSelectedSeen()
     }
 
+    /// The host only reports changes, so an event too young to judge when the shell came back
+    /// is judged again once the host has had time to report a new Claude.
     private func clearStaleClaudeEvents() {
-        let stale = ClaudeEvent.stale(claudeEvents, activities: host.activities, now: Date())
+        let now = Date()
+        let isTooYoungToJudge = claudeEvents.contains { id, event in
+            host.activities[id] == .idle && now.timeIntervalSince(event.at) <= ClaudeEvent.hostReportDelay
+        }
+        if isTooYoungToJudge {
+            DispatchQueue.main.asyncAfter(deadline: .now() + ClaudeEvent.hostReportDelay + 0.1) { [weak self] in
+                self?.clearStaleClaudeEvents()
+            }
+        }
+        let stale = ClaudeEvent.stale(claudeEvents, activities: host.activities, now: now)
         guard !stale.isEmpty else { return }
         for id in stale {
             do {
@@ -254,8 +265,9 @@ final class AppModel {
     }
 
     /// Only sessions that start needing me while Harbor is in the background are announced;
-    /// what already needed me when Harbor opened just shows in the badge.
+    /// what already needed me when the host first answered just shows in the badge.
     private func refreshAttention() {
+        guard host.hasReceivedSessions else { return }
         let needing = Set(workspace.liveSessions.filter { indicator(of: $0.id).needsAttention }.map(\.id))
         let fresh = needing.subtracting(attentionIDs ?? [])
         let isFirstCount = attentionIDs == nil
