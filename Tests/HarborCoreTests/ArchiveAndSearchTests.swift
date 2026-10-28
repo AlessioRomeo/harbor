@@ -65,15 +65,16 @@ struct ArchiveTests {
         let claude = try workspace.addSession(named: "claude", to: group, now: old)
         let attention = try workspace.addSession(named: "attention", to: group, now: old)
         let selected = try workspace.addSession(named: "selected", to: group, now: old)
+        let visible = try workspace.addSession(named: "visible", to: group, now: old)
         let recent = try workspace.addSession(named: "recent", to: group, now: now.addingTimeInterval(-60))
         let archived = try workspace.addSession(named: "archived", to: group, now: old)
         workspace.archive(archived, at: old)
 
         let indicators: [UUID: SessionIndicator] = [
             idle: .idle, running: .running, claude: .claudeIdle,
-            attention: .needsAttention(.finished), selected: .idle, recent: .idle,
+            attention: .needsAttention(.finished), selected: .idle, visible: .idle, recent: .idle,
         ]
-        let chosen = workspace.sessionsToAutoArchive(now: now, idleInterval: week, indicators: indicators, selected: selected)
+        let chosen = workspace.sessionsToAutoArchive(now: now, idleInterval: week, indicators: indicators, onScreen: [selected, visible])
         #expect(chosen == [idle, unstarted])
     }
 }

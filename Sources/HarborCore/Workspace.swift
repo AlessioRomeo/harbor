@@ -34,6 +34,8 @@ public struct Workspace: Codable, Equatable, Sendable {
     public private(set) var sessions: [Session]
     /// The panes on screen; nil before anything was arranged.
     public private(set) var layout: PaneLayout?
+    /// The pane with the keyboard, always one of the layout's panes.
+    public private(set) var focusedPane: UUID?
 
     public init(groups: [SessionGroup] = [], sessions: [Session] = []) {
         self.groups = groups
@@ -144,12 +146,27 @@ public struct Workspace: Codable, Equatable, Sendable {
     public mutating func archive(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }), !sessions[index].isArchived else { return }
         sessions[index].archivedAt = date
-        layout = layout?.removing(id)
+        removeFromLayout(id)
     }
 
-    /// Stores a layout holding only live sessions, each once.
-    public mutating func setLayout(_ newLayout: PaneLayout?) {
+    /// Stores a layout holding only live sessions, each once. The focus stays where it was if that
+    /// pane is still there, else moves to `focus`, else to the first pane.
+    public mutating func setLayout(_ newLayout: PaneLayout?, focus: UUID? = nil) {
         layout = newLayout?.pruned(keeping: Set(liveSessions.map(\.id)))
+        let panes = layout?.sessionIDs ?? []
+        focusedPane = [focus, focusedPane].compactMap { $0 }.first(where: panes.contains) ?? panes.first
+    }
+
+    public mutating func focusPane(_ id: UUID) {
+        guard layout?.contains(id) == true else { return }
+        focusedPane = id
+    }
+
+    /// Takes a pane off screen; the focus moves to the pane that takes its space.
+    public mutating func removeFromLayout(_ id: UUID) {
+        guard let current = layout, current.contains(id) else { return }
+        let successor = [PaneEdge.right, .left, .bottom, .top].lazy.compactMap { current.neighbour(of: id, toward: $0) }.first
+        setLayout(current.removing(id), focus: focusedPane == id ? successor : focusedPane)
     }
 
     /// Drops panes of sessions that are gone or archived, as after reading an older or edited file.
@@ -172,15 +189,15 @@ public struct Workspace: Codable, Equatable, Sendable {
     }
 
     public mutating func deleteSession(_ id: UUID) {
+        removeFromLayout(id)
         sessions.removeAll { $0.id == id }
-        layout = layout?.removing(id)
     }
 
     /// Live sessions quiet for `idleInterval` that nothing holds open: no program running,
-    /// nothing waiting for me, and not the one on screen.
-    public func sessionsToAutoArchive(now: Date, idleInterval: TimeInterval, indicators: [UUID: SessionIndicator], selected: UUID?) -> [UUID] {
+    /// nothing waiting for me, and not on screen.
+    public func sessionsToAutoArchive(now: Date, idleInterval: TimeInterval, indicators: [UUID: SessionIndicator], onScreen: Set<UUID>) -> [UUID] {
         liveSessions.compactMap { session in
-            guard session.id != selected, now.timeIntervalSince(session.lastActivityAt) >= idleInterval else { return nil }
+            guard !onScreen.contains(session.id), now.timeIntervalSince(session.lastActivityAt) >= idleInterval else { return nil }
             switch indicators[session.id] ?? .notStarted {
             case .idle, .notStarted, .ended: return session.id
             case .running, .claudeWorking, .claudeIdle, .needsAttention: return nil

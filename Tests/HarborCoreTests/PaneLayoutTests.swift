@@ -134,6 +134,16 @@ struct PaneLayoutTests {
         #expect(messy.pruned(keeping: []) == nil)
     }
 
+    @Test func describesEverySplitForItsDivider() {
+        let areas = twoByTwo.splitAreas(in: CGRect(x: 0, y: 0, width: 200, height: 100))
+        #expect(areas.map(\.path) == [[], [false], [true]])
+        #expect(areas[0].axis == .vertical)
+        #expect(areas[0].dividerPosition == 50)
+        #expect(areas[1].dividerPosition == 100)
+        #expect(areas[2].bounds == CGRect(x: 0, y: 50, width: 200, height: 50))
+        #expect(PaneLayout.pane(a).splitAreas(in: .zero).isEmpty)
+    }
+
     @Test func roundTripsThroughJSON() throws {
         let data = try JSONEncoder().encode(twoByTwo)
         #expect(try JSONDecoder().decode(PaneLayout.self, from: data) == twoByTwo)
@@ -154,6 +164,30 @@ struct WorkspaceLayoutTests {
         #expect(workspace.layout?.sessionIDs == [a, c])
         workspace.deleteSession(a)
         #expect(workspace.layout == .pane(c))
+    }
+
+    @Test func keepsTheFocusOnAPaneThatExists() throws {
+        var workspace = Workspace()
+        let group = workspace.addGroup(named: "Me")
+        let a = try workspace.addSession(named: "a", to: group)
+        let b = try workspace.addSession(named: "b", to: group)
+        let c = try workspace.addSession(named: "c", to: group)
+        workspace.setLayout(.split(.horizontal, ratio: 0.5, first: .pane(a), second: .pane(b)), focus: b)
+        #expect(workspace.focusedPane == b)
+
+        workspace.focusPane(c)
+        #expect(workspace.focusedPane == b)
+
+        workspace.setLayout(workspace.layout?.replacing(b, with: c), focus: c)
+        #expect(workspace.focusedPane == c)
+
+        workspace.archive(c, at: Date())
+        #expect(workspace.layout == .pane(a))
+        #expect(workspace.focusedPane == a)
+
+        workspace.removeFromLayout(a)
+        #expect(workspace.layout == nil)
+        #expect(workspace.focusedPane == nil)
     }
 
     @Test func readsFilesWrittenBeforeLayouts() throws {

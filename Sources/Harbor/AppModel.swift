@@ -428,7 +428,7 @@ final class AppModel {
             now: Date(),
             idleInterval: TimeInterval(autoArchiveDays) * 24 * 3600,
             indicators: indicators,
-            selected: selectedID
+            onScreen: Set(workspace.layout?.sessionIDs ?? []).union(selectedID.map { [$0] } ?? [])
         )
         for id in quiet {
             archive(id)

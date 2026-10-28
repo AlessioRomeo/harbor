@@ -150,6 +150,28 @@ public indirect enum PaneLayout: Codable, Equatable, Sendable {
         }
     }
 
+    /// A split's place on screen, for drawing and dragging its divider.
+    public struct SplitArea: Equatable, Sendable {
+        /// Which child to take at each level to reach this split (false = first, true = second).
+        public var path: [Bool]
+        public var axis: SplitAxis
+        public var ratio: Double
+        public var bounds: CGRect
+
+        /// The line between the two sides.
+        public var dividerPosition: CGFloat {
+            axis == .horizontal ? bounds.minX + bounds.width * ratio : bounds.minY + bounds.height * ratio
+        }
+    }
+
+    public func splitAreas(in bounds: CGRect, path: [Bool] = []) -> [SplitArea] {
+        guard case .split(let axis, let ratio, let first, let second) = self else { return [] }
+        let (firstRect, secondRect) = Self.divide(bounds, axis: axis, ratio: ratio)
+        return [SplitArea(path: path, axis: axis, ratio: ratio, bounds: bounds)]
+            + first.splitAreas(in: firstRect, path: path + [false])
+            + second.splitAreas(in: secondRect, path: path + [true])
+    }
+
     public static func divide(_ bounds: CGRect, axis: SplitAxis, ratio: Double) -> (CGRect, CGRect) {
         switch axis {
         case .horizontal:
