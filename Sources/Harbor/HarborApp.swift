@@ -28,18 +28,39 @@ struct HarborApp: App {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     weak var model: AppModel?
 
-    /// The View menu's system Toggle Sidebar item sends this up the responder chain; with no
-    /// system split view to take it, it ends here.
+    /// SwiftUI keeps a hidden system "Toggle Sidebar" item (⌥⌘S) in the main menu. Sent up the
+    /// responder chain it stops at SwiftUI's window, which declines it without a system split
+    /// view, so the item is pointed here instead, including whenever SwiftUI rebuilds the menu.
     @objc func toggleSidebar(_ sender: Any?) {
         model?.toggleSidebar()
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard item.action == #selector(toggleSidebar(_:)), let model else { return false }
+        item.title = model.isSidebarHidden ? "Show Sidebar" : "Hide Sidebar"
+        return true
+    }
+
+    private func claimSidebarItems() {
+        let items = NSApp.mainMenu?.items.flatMap { $0.submenu?.items ?? [] } ?? []
+        for item in items where item.action == #selector(toggleSidebar(_:)) {
+            item.target = self
+        }
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         SelectionEditing.install()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        claimSidebarItems()
+        NotificationCenter.default.addObserver(forName: NSMenu.didAddItemNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.claimSidebarItems() }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

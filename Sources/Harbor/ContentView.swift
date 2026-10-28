@@ -15,6 +15,7 @@ struct ContentView: View {
                         .ignoresSafeArea()
                     SidebarDivider()
                 }
+                .zIndex(1)
                 .transition(.move(edge: .leading))
             }
             DetailView()
@@ -124,16 +125,16 @@ private struct SidebarDivider: View {
     @Environment(AppModel.self) private var model
     @State private var widthAtDragStart: Double?
 
-    /// The grab area reaches this far over the sidebar, as the system divider's does.
-    private static let gripOverSidebar: CGFloat = 3
+    /// The grab area reaches this far to each side of the line, as the system divider's does.
+    private static let gripPerSide: CGFloat = 2
 
     var body: some View {
         DividerLine()
             .frame(width: 1)
             .ignoresSafeArea()
-            .overlay(alignment: .trailing) {
+            .overlay {
                 Color.clear
-                    .frame(width: Self.gripOverSidebar + 1)
+                    .frame(width: 1 + 2 * Self.gripPerSide)
                     .contentShape(Rectangle())
                     .onHover { inside in
                         if inside {
