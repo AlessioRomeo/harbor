@@ -32,7 +32,15 @@ You have a dev server in one tab, tests in another, three Claude Code sessions s
 
 ## Install
 
-Harbor is built from source. You need macOS 14 or later and Xcode (Swift 6.2 or newer).
+Harbor needs macOS 14 or later, on Apple silicon or Intel.
+
+1. Download [**Harbor.dmg**](https://github.com/AlessioRomeo/harbor/releases/latest/download/Harbor.dmg) from the latest release.
+2. Open it and drag Harbor into Applications.
+3. Open Harbor from Applications or Spotlight.
+
+### Build from source
+
+You need Xcode (Swift 6.2 or newer).
 
 ```sh
 git clone https://github.com/AlessioRomeo/harbor.git
@@ -99,6 +107,7 @@ The code is split into `HarborCore` (workspace model, layouts, the protocol and 
 ```sh
 ./scripts/test.sh    # run the tests
 ./scripts/build-app.sh
+./scripts/release.sh 1.2.0    # build/Harbor.dmg, universal; see the script for signing and notarization
 HARBOR_DATA_DIR=/tmp/harbor-dev build/Harbor.app/Contents/MacOS/Harbor    # a separate instance with its own host and sessions
 ```
 

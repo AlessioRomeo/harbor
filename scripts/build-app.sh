@@ -2,25 +2,10 @@
 # Builds Harbor.app and installs it in ~/Applications.
 # The new bundle is staged and moved into place: overwriting the running host's binary in place could get it killed.
 set -eu
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 cd "$(dirname "$0")/.."
-
-swift build -c release --product Harbor
-swift build -c release --product harbor-host
-bin="$(swift build -c release --show-bin-path)"
+./scripts/bundle-app.sh "$@"
 
 stage="build/Harbor.app"
-rm -rf build
-mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Helpers" "$stage/Contents/Resources"
-cp "$bin/Harbor" "$stage/Contents/MacOS/Harbor"
-cp "$bin/harbor-host" "$stage/Contents/Helpers/harbor-host"
-cp Resources/Info.plist "$stage/Contents/Info.plist"
-cp Resources/claude-hook.sh "$stage/Contents/Resources/claude-hook.sh"
-cp Resources/AppIcon.icns "$stage/Contents/Resources/AppIcon.icns"
-
-codesign --force --sign - --identifier com.alessioromeo.harbor.host "$stage/Contents/Helpers/harbor-host"
-codesign --force --sign - "$stage"
-
 install_dir="$HOME/Applications"
 mkdir -p "$install_dir"
 incoming="$install_dir/.Harbor.app.incoming"
