@@ -2,7 +2,7 @@ import Foundation
 
 /// How wide the sidebar is, kept within the range it reads well at.
 public enum SidebarWidth {
-    public static let range: ClosedRange<Double> = 200...360
+    public static let range: ClosedRange<Double> = 220...360
     public static let standard: Double = 250
     /// Dragging the divider below this hides the sidebar instead of narrowing it.
     public static let hidingThreshold: Double = 100

@@ -18,13 +18,8 @@ struct ContentView: View {
                 .zIndex(1)
                 .transition(.move(edge: .leading))
             }
-            DetailView()
-                .overlay(alignment: .topLeading) {
-                    if model.isSidebarHidden {
-                        SidebarToggle()
-                            .padding(.leading, model.isFullScreen ? 10 : 78)
-                    }
-                }
+            DetailColumn(model: model)
+                .ignoresSafeArea()
         }
         .frame(minWidth: 720, minHeight: 420)
         .background(WindowStyler { model.isFullScreen = $0 })
@@ -84,7 +79,7 @@ private struct SidebarToggle: View {
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
-        .help(model.isSidebarHidden ? "Show sidebar (⌃⌘S)" : "Hide sidebar (⌃⌘S)")
+        .help(model.isSidebarHidden ? "Show sidebar (⌥⌘S)" : "Hide sidebar (⌥⌘S)")
         .ignoresSafeArea()
     }
 }
@@ -116,6 +111,33 @@ private struct SidebarColumn: NSViewRepresentable {
                     .padding(.trailing, 10)
             }
             .environment(model)
+    }
+}
+
+/// The panes in a hosting view of their own, as the system split view hosted them. Hosted in the
+/// window's root view instead, a drag on a pane header in the title bar strip moves the window.
+private struct DetailColumn: NSViewRepresentable {
+    let model: AppModel
+
+    func makeNSView(context: Context) -> NSHostingView<Panes> {
+        NSHostingView(rootView: Panes(model: model))
+    }
+
+    func updateNSView(_ host: NSHostingView<Panes>, context: Context) {}
+
+    struct Panes: View {
+        let model: AppModel
+
+        var body: some View {
+            DetailView()
+                .overlay(alignment: .topLeading) {
+                    if model.isSidebarHidden {
+                        SidebarToggle()
+                            .padding(.leading, model.isFullScreen ? 10 : 78)
+                    }
+                }
+                .environment(model)
+        }
     }
 }
 

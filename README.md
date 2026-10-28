@@ -91,7 +91,7 @@ Outside Harbor, the hook does nothing. It always exits successfully, so it can n
 | Find in terminal | <kbd>⇧⌘F</kbd> |
 | Clear | <kbd>⌘K</kbd> |
 | Bigger / smaller / default text | <kbd>⌘+</kbd> / <kbd>⌘−</kbd> / <kbd>⌘0</kbd> |
-| Show or hide the sidebar | <kbd>⌃⌘S</kbd> |
+| Show or hide the sidebar | <kbd>⌥⌘S</kbd> |
 
 ## How it works
 

@@ -15,7 +15,7 @@ struct SidebarWidthTests {
     }
 
     @Test func keepsTheWidthInRange() {
-        #expect(SidebarWidth.clamped(140) == 200)
+        #expect(SidebarWidth.clamped(140) == 220)
         #expect(SidebarWidth.clamped(280) == 280)
         #expect(SidebarWidth.clamped(900) == 360)
     }

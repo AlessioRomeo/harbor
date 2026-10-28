@@ -213,11 +213,11 @@ private struct SidebarFooter: View {
     var body: some View {
         HStack(spacing: 14) {
             Button {
-                model.newSession()
+                model.newGroup()
             } label: {
-                Label("New Session", systemImage: "plus")
+                Label("New Group", systemImage: "folder.badge.plus")
             }
-            .help("New session in General")
+            .help("New group (⇧⌘N)")
             .opacity(model.isShowingArchive ? 0 : 1)
             .disabled(model.isShowingArchive)
             Spacer()
@@ -230,14 +230,6 @@ private struct SidebarFooter: View {
                 }
                 .help(model.isShowingArchive ? "Back to sessions" : "Archived sessions")
             }
-            Button {
-                model.newGroup()
-            } label: {
-                Image(systemName: "folder.badge.plus")
-            }
-            .help("New group (⇧⌘N)")
-            .opacity(model.isShowingArchive ? 0 : 1)
-            .disabled(model.isShowingArchive)
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
