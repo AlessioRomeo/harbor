@@ -47,6 +47,9 @@ final class AppModel {
             if let selectedID, let session = workspace.session(selectedID) {
                 isShowingArchive = session.isArchived
             }
+            if let selectedID, !(sidebarSelection.count > 1 && sidebarSelection.contains(selectedID)) {
+                sidebarSelection = [selectedID]
+            }
         }
     }
     private var pendingCreations: Set<UUID> = []
@@ -58,7 +61,18 @@ final class AppModel {
     private let notifier = AttentionNotifier()
     private var autoArchiveTimer: Timer?
     /// A session waiting for me to confirm that archiving may end what runs in it.
-    var archiveNeedingConfirmation: UUID?
+    var archiveNeedingConfirmation: Set<UUID> = []
+    /// Sessions waiting for me to confirm they should go for good.
+    var deletionNeedingConfirmation: Set<UUID> = []
+    /// What's highlighted in the sidebar. One session there is the selection; several (⌘- or
+    /// ⇧-click) are only gathered to archive, move, restore or delete together.
+    var sidebarSelection: Set<UUID> = [] {
+        didSet {
+            if sidebarSelection.count == 1, let only = sidebarSelection.first, only != selectedID {
+                selectedID = only
+            }
+        }
+    }
     var isSwitcherOpen = false
     /// The sidebar lists archived sessions instead of groups.
     var isShowingArchive = false
@@ -490,18 +504,40 @@ final class AppModel {
         update { $0.recordActivity(id, at: date) }
     }
 
-    /// Archiving ends the shell, so a session with something running asks first.
-    func requestArchive(_ id: UUID) {
-        switch indicator(of: id) {
-        case .running, .claudeWorking, .claudeIdle, .needsAttention:
-            archiveNeedingConfirmation = id
-        case .notStarted, .idle, .ended:
+    /// The sessions a menu command on `id` acts on: the whole sidebar selection if `id` is part of it.
+    func targets(of id: UUID) -> Set<UUID> {
+        sidebarSelection.count > 1 && sidebarSelection.contains(id) ? sidebarSelection : [id]
+    }
+
+    /// In sidebar order, so archiving and restoring several keeps their order.
+    private func ordered(_ ids: Set<UUID>) -> [UUID] {
+        workspace.sessions.map(\.id).filter(ids.contains)
+    }
+
+    /// Archiving ends the shell, so sessions with something running ask first.
+    func requestArchive(_ ids: Set<UUID>) {
+        let live = Set(ids.filter { workspace.session($0)?.isArchived == false })
+        let isAnyBusy = live.contains { id in
+            switch indicator(of: id) {
+            case .running, .claudeWorking, .claudeIdle, .needsAttention: true
+            case .notStarted, .idle, .ended: false
+            }
+        }
+        if isAnyBusy {
+            archiveNeedingConfirmation = live
+        } else {
+            archive(live)
+        }
+    }
+
+    func archive(_ ids: Set<UUID>) {
+        archiveNeedingConfirmation = []
+        for id in ordered(ids) {
             archive(id)
         }
     }
 
-    func archive(_ id: UUID) {
-        archiveNeedingConfirmation = nil
+    private func archive(_ id: UUID) {
         guard let session = workspace.session(id), !session.isArchived else { return }
         controllers.removeValue(forKey: id)?.detach()
         pendingCreations.remove(id)
@@ -517,14 +553,31 @@ final class AppModel {
         refreshAttention()
     }
 
-    func restore(_ id: UUID) {
-        update { $0.restore(id, at: Date()) }
-        controllers.removeValue(forKey: id)
+    func restore(_ ids: Set<UUID>) {
+        let restored = ordered(ids).filter { workspace.session($0)?.isArchived == true }
+        guard let last = restored.last else { return }
+        for id in restored {
+            update { $0.restore(id, at: Date()) }
+            controllers.removeValue(forKey: id)
+        }
         selectedID = nil
-        selectedID = id
+        selectedID = last
     }
 
-    func deletePermanently(_ id: UUID) {
+    func moveSessions(_ ids: Set<UUID>, to groupID: UUID) {
+        for id in ordered(ids) {
+            moveSession(id, to: groupID)
+        }
+    }
+
+    func deletePermanently(_ ids: Set<UUID>) {
+        deletionNeedingConfirmation = []
+        for id in ordered(ids) {
+            deletePermanently(id)
+        }
+    }
+
+    private func deletePermanently(_ id: UUID) {
         let sidebarNeighbour = workspace.session(id).flatMap(neighbour(of:))
         controllers.removeValue(forKey: id)?.detach()
         if host.activities[id] != nil {

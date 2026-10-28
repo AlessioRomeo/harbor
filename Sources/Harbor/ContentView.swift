@@ -20,18 +20,39 @@ struct ContentView: View {
             QuickSwitcher()
         }
         .confirmationDialog(
-            "Archive “\(model.archiveNeedingConfirmation.flatMap { model.workspace.session($0)?.name } ?? "")”?",
+            archiveQuestion,
             isPresented: Binding(
-                get: { model.archiveNeedingConfirmation != nil },
-                set: { if !$0 { model.archiveNeedingConfirmation = nil } }
+                get: { !model.archiveNeedingConfirmation.isEmpty },
+                set: { if !$0 { model.archiveNeedingConfirmation = [] } }
             )
         ) {
-            Button("Archive") {
-                if let id = model.archiveNeedingConfirmation { model.archive(id) }
-            }
+            Button("Archive") { model.archive(model.archiveNeedingConfirmation) }
         } message: {
-            Text("Something is still running in it. Archiving ends it; the output is kept.")
+            Text("Something is still running there. Archiving ends it; the output is kept.")
         }
+        .confirmationDialog(
+            deletionQuestion,
+            isPresented: Binding(
+                get: { !model.deletionNeedingConfirmation.isEmpty },
+                set: { if !$0 { model.deletionNeedingConfirmation = [] } }
+            )
+        ) {
+            Button("Delete", role: .destructive) { model.deletePermanently(model.deletionNeedingConfirmation) }
+        } message: {
+            Text("Names and saved output go too, and anything still running ends. This can't be undone.")
+        }
+    }
+}
+
+extension ContentView {
+    private var archiveQuestion: String {
+        let ids = model.archiveNeedingConfirmation
+        return ids.count == 1 ? "Archive “\(ids.first.flatMap { model.workspace.session($0)?.name } ?? "")”?" : "Archive \(ids.count) sessions?"
+    }
+
+    private var deletionQuestion: String {
+        let ids = model.deletionNeedingConfirmation
+        return ids.count == 1 ? "Delete “\(ids.first.flatMap { model.workspace.session($0)?.name } ?? "")” for good?" : "Delete \(ids.count) sessions for good?"
     }
 }
 

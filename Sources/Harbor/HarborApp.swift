@@ -56,9 +56,12 @@ struct HarborCommands: Commands {
                 .keyboardShortcut("f")
         }
         CommandGroup(replacing: .saveItem) {
-            Button(archivableSession == nil ? "Close Window" : "Archive Session") {
-                if let archivableSession {
-                    model.requestArchive(archivableSession)
+            let several = archivableSession != nil && model.sidebarSelection.count > 1
+            Button(archivableSession == nil ? "Close Window" : several ? "Archive \(model.sidebarSelection.count) Sessions" : "Archive Session") {
+                if several {
+                    model.requestArchive(model.sidebarSelection)
+                } else if let archivableSession {
+                    model.requestArchive([archivableSession])
                 } else {
                     NSApp.keyWindow?.performClose(nil)
                 }

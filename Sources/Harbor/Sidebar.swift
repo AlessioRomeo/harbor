@@ -18,7 +18,7 @@ struct Sidebar: View {
 
     private var sessionList: some View {
         @Bindable var model = model
-        return List(selection: $model.selectedID) {
+        return List(selection: $model.sidebarSelection) {
             ForEach(model.workspace.groups) { group in
                 Section {
                     if model.workspace.liveSessions(in: group.id).isEmpty {
@@ -140,15 +140,21 @@ private struct SessionMenu: View {
     let session: Session
 
     var body: some View {
-        Button("Rename…") { model.editingID = session.id }
-        Menu("Move to") {
+        let targets = model.targets(of: session.id)
+        if targets.count == 1 {
+            Button("Rename…") { model.editingID = session.id }
+        }
+        Menu(targets.count == 1 ? "Move to" : "Move \(targets.count) Sessions to") {
             ForEach(model.workspace.groups) { group in
-                Button(group.name) { model.moveSession(session.id, to: group.id) }
-                    .disabled(group.id == session.groupID)
+                Button(group.name) { model.moveSessions(targets, to: group.id) }
+                    .disabled(targets.allSatisfy { model.workspace.session($0)?.groupID == group.id })
             }
         }
         Divider()
-        Button("Archive") { model.requestArchive(session.id) }
+        Button(targets.count == 1 ? "Archive" : "Archive \(targets.count) Sessions") { model.requestArchive(targets) }
+        Button(targets.count == 1 ? "Delete Permanently…" : "Delete \(targets.count) Sessions Permanently…") {
+            model.deletionNeedingConfirmation = targets
+        }
     }
 }
 
@@ -199,11 +205,10 @@ private struct SidebarFooter: View {
 /// Old sessions, out of the way but a click from coming back.
 private struct ArchiveList: View {
     @Environment(AppModel.self) private var model
-    @State private var sessionToDelete: Session?
 
     var body: some View {
         @Bindable var model = model
-        List(selection: $model.selectedID) {
+        List(selection: $model.sidebarSelection) {
             Section {
                 ForEach(model.workspace.archivedSessions) { session in
                     HStack(spacing: 10) {
@@ -219,9 +224,12 @@ private struct ArchiveList: View {
                     .padding(SidebarMetrics.rowInset)
                     .tag(session.id)
                     .contextMenu {
-                        Button("Restore") { model.restore(session.id) }
+                        let targets = model.targets(of: session.id)
+                        Button(targets.count == 1 ? "Restore" : "Restore \(targets.count) Sessions") { model.restore(targets) }
                         Divider()
-                        Button("Delete Permanently…") { sessionToDelete = session }
+                        Button(targets.count == 1 ? "Delete Permanently…" : "Delete \(targets.count) Sessions Permanently…") {
+                            model.deletionNeedingConfirmation = targets
+                        }
                     }
                 }
                 if model.workspace.archivedSessions.isEmpty {
@@ -245,16 +253,6 @@ private struct ArchiveList: View {
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, SidebarMetrics.rowHeight)
-        .confirmationDialog(
-            "Delete “\(sessionToDelete?.name ?? "")” for good?",
-            isPresented: Binding(get: { sessionToDelete != nil }, set: { if !$0 { sessionToDelete = nil } })
-        ) {
-            Button("Delete", role: .destructive) {
-                if let sessionToDelete { model.deletePermanently(sessionToDelete.id) }
-            }
-        } message: {
-            Text("Its name and saved output go too. This can't be undone.")
-        }
     }
 }
 

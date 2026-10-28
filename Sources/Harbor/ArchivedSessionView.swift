@@ -30,7 +30,7 @@ struct ArchivedSessionView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button("Restore") { model.restore(session.id) }
+                Button("Restore") { model.restore([session.id]) }
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
                     .fixedSize()
