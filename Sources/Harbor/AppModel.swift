@@ -74,8 +74,14 @@ final class AppModel {
         }
     }
     var isSwitcherOpen = false
-    /// The sidebar lists archived sessions instead of groups.
-    var isShowingArchive = false
+    /// The sidebar lists archived sessions instead of groups. Switching starts a fresh selection,
+    /// so nothing highlighted in one list can be acted on from the other.
+    var isShowingArchive = false {
+        didSet {
+            guard isShowingArchive != oldValue else { return }
+            sidebarSelection = selectedID.map { [$0] } ?? []
+        }
+    }
     var autoArchiveDays: Int {
         didSet {
             UserDefaults.standard.set(autoArchiveDays, forKey: Self.autoArchiveKey)
@@ -506,7 +512,12 @@ final class AppModel {
 
     /// The sessions a menu command on `id` acts on: the whole sidebar selection if `id` is part of it.
     func targets(of id: UUID) -> Set<UUID> {
-        sidebarSelection.count > 1 && sidebarSelection.contains(id) ? sidebarSelection : [id]
+        workspace.targets(of: id, selection: sidebarSelection)
+    }
+
+    /// The live sessions highlighted in the session list, for ⌘W; empty while the archive is shown.
+    var selectedLiveSessions: Set<UUID> {
+        isShowingArchive ? [] : sidebarSelection.filter { workspace.session($0)?.isArchived == false }
     }
 
     /// In sidebar order, so archiving and restoring several keeps their order.

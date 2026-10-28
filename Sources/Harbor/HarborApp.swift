@@ -56,10 +56,11 @@ struct HarborCommands: Commands {
                 .keyboardShortcut("f")
         }
         CommandGroup(replacing: .saveItem) {
-            let several = archivableSession != nil && model.sidebarSelection.count > 1
-            Button(archivableSession == nil ? "Close Window" : several ? "Archive \(model.sidebarSelection.count) Sessions" : "Archive Session") {
+            let selected = model.selectedLiveSessions
+            let several = archivableSession != nil && selected.count > 1
+            Button(archivableSession == nil ? "Close Window" : several ? "Archive \(selected.count) Sessions" : "Archive Session") {
                 if several {
-                    model.requestArchive(model.sidebarSelection)
+                    model.requestArchive(selected)
                 } else if let archivableSession {
                     model.requestArchive([archivableSession])
                 } else {

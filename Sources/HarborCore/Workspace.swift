@@ -216,6 +216,14 @@ public struct Workspace: Codable, Equatable, Sendable {
         }
     }
 
+    /// What a command on `clicked` acts on: the selected sessions of the same kind (live or archived)
+    /// when `clicked` is one of them, otherwise just `clicked`. Selected sessions that went away or
+    /// changed kind since being selected, such as one archived in the background, are left out.
+    public func targets(of clicked: UUID, selection: Set<UUID>) -> Set<UUID> {
+        guard let kind = session(clicked)?.isArchived, selection.contains(clicked) else { return [clicked] }
+        return selection.filter { session($0)?.isArchived == kind }
+    }
+
     public mutating func markSeen(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[index].lastSeenAt = date

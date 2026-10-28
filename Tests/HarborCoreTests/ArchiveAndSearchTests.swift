@@ -69,6 +69,35 @@ struct ArchiveTests {
     }
 }
 
+struct ActionTargetTests {
+    @Test func actsOnlyOnSelectedSessionsOfTheClickedKind() throws {
+        var workspace = Workspace()
+        let group = workspace.addGroup(named: "Me")
+        let a = try workspace.addSession(named: "a", to: group)
+        let b = try workspace.addSession(named: "b", to: group)
+        let c = try workspace.addSession(named: "c", to: group)
+        let old = try workspace.addSession(named: "old", to: group)
+        workspace.archive(old, at: Date())
+        let selection: Set<UUID> = [a, b, c, old, UUID()]
+
+        #expect(workspace.targets(of: a, selection: selection) == [a, b, c])
+        #expect(workspace.targets(of: old, selection: selection) == [old])
+
+        workspace.archive(b, at: Date())
+        #expect(workspace.targets(of: a, selection: selection) == [a, c])
+        #expect(workspace.targets(of: old, selection: selection) == [old, b])
+    }
+
+    @Test func aRowOutsideTheSelectionActsAlone() throws {
+        var workspace = Workspace()
+        let group = workspace.addGroup(named: "Me")
+        let a = try workspace.addSession(named: "a", to: group)
+        let b = try workspace.addSession(named: "b", to: group)
+        let c = try workspace.addSession(named: "c", to: group)
+        #expect(workspace.targets(of: c, selection: [a, b]) == [c])
+    }
+}
+
 struct SearchTests {
     private func workspace() throws -> Workspace {
         var workspace = Workspace()
