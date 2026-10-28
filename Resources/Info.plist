@@ -26,6 +26,8 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>UIDesignRequiresCompatibility</key>
+    <true/>
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
