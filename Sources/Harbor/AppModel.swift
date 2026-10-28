@@ -1,6 +1,7 @@
 import AppKit
 import HarborCore
 import Observation
+import SwiftUI
 import os
 
 @Observable
@@ -302,6 +303,18 @@ final class AppModel {
     var isZoomed = false
     /// In full screen there's no title bar, so panes can start at the very top.
     var isFullScreen = false
+    /// Whether the sidebar is shown; the window's buttons then sit over it, not over the panes.
+    var sidebarVisibility = NavigationSplitViewVisibility.all
+
+    var isSidebarHidden: Bool {
+        sidebarVisibility == .detailOnly
+    }
+
+    func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            sidebarVisibility = isSidebarHidden ? .all : .detailOnly
+        }
+    }
     /// Groups folded away in the sidebar, remembered across launches.
     private(set) var collapsedGroups: Set<UUID> = Set(
         (UserDefaults.standard.stringArray(forKey: AppModel.collapsedGroupsKey) ?? []).compactMap(UUID.init(uuidString:))

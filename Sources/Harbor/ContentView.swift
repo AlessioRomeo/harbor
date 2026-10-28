@@ -7,12 +7,22 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $model.sidebarVisibility) {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
                 .toolbar(removing: .sidebarToggle)
+                .overlay(alignment: .topTrailing) {
+                    SidebarToggle()
+                        .padding(.trailing, 10)
+                }
         } detail: {
             DetailView()
+                .overlay(alignment: .topLeading) {
+                    if model.isSidebarHidden {
+                        SidebarToggle()
+                            .padding(.leading, model.isFullScreen ? 10 : 78)
+                    }
+                }
         }
         .frame(minWidth: 720, minHeight: 420)
         .background(WindowStyler { model.isFullScreen = $0 })
@@ -54,6 +64,26 @@ extension ContentView {
     private var deletionQuestion: String {
         let ids = model.deletionNeedingConfirmation
         return ids.count == 1 ? "Delete “\(ids.first.flatMap { model.workspace.session($0)?.name } ?? "")” for good?" : "Delete \(ids.count) sessions for good?"
+    }
+}
+
+/// Shows or hides the sidebar, level with the window's close, minimise and zoom buttons.
+private struct SidebarToggle: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button {
+            model.toggleSidebar()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 13))
+                .frame(width: 24, height: PaneCanvas.titleBarHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help(model.isSidebarHidden ? "Show sidebar (⌃⌘S)" : "Hide sidebar (⌃⌘S)")
+        .ignoresSafeArea()
     }
 }
 

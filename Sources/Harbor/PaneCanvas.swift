@@ -15,7 +15,7 @@ struct PaneCanvas: View {
     var body: some View {
         let isSingle = layout.sessionIDs.count == 1
         GeometryReader { geometry in
-            let top: CGFloat = 0
+            let top: CGFloat = model.isSidebarHidden ? Self.titleBarHeight : 0
             let bounds = CGRect(x: 0, y: top, width: geometry.size.width, height: max(0, geometry.size.height - top))
             let shown = liveRatios.reduce(layout) { $0.settingRatio($1.value, at: $1.key) }
             let zoomed = model.isZoomed ? model.workspace.focusedPane.flatMap { layout.contains($0) ? $0 : nil } : nil
@@ -249,6 +249,8 @@ private struct DividerHandle: View {
 
 extension PaneCanvas {
     static let coordinateSpace = "paneCanvas"
+    /// The strip the window's buttons and the sidebar button sit in while the sidebar is hidden.
+    static let titleBarHeight: CGFloat = 28
 }
 
 /// Sessions dragged inside Harbor carry their own type, visible only to Harbor,
