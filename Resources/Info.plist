@@ -8,6 +8,8 @@
     <string>Harbor</string>
     <key>CFBundleIdentifier</key>
     <string>com.alessioromeo.harbor</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleExecutable</key>
     <string>Harbor</string>
     <key>CFBundlePackageType</key>

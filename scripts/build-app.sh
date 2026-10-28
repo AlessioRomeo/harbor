@@ -16,6 +16,7 @@ cp "$bin/Harbor" "$stage/Contents/MacOS/Harbor"
 cp "$bin/harbor-host" "$stage/Contents/Helpers/harbor-host"
 cp Resources/Info.plist "$stage/Contents/Info.plist"
 cp Resources/claude-hook.sh "$stage/Contents/Resources/claude-hook.sh"
+cp Resources/AppIcon.icns "$stage/Contents/Resources/AppIcon.icns"
 
 codesign --force --sign - --identifier com.alessioromeo.harbor.host "$stage/Contents/Helpers/harbor-host"
 codesign --force --sign - "$stage"
