@@ -50,6 +50,12 @@ struct PaneLayoutTests {
         #expect(pair.placing(a, at: .edge(.right), of: b).sessionIDs == [b, a])
     }
 
+    @Test func placingAPaneOnTheSideItAlreadyHoldsChangesNothing() {
+        #expect(twoByTwo.placing(b, at: .edge(.right), of: a) == twoByTwo)
+        #expect(twoByTwo.placing(c, at: .edge(.left), of: d) == twoByTwo)
+        #expect(twoByTwo.placing(b, at: .edge(.left), of: a) != twoByTwo)
+    }
+
     @Test func findsNeighboursInAGrid() {
         #expect(twoByTwo.neighbour(of: a, toward: .right) == b)
         #expect(twoByTwo.neighbour(of: a, toward: .bottom) == c)

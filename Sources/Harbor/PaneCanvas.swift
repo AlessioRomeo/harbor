@@ -113,11 +113,12 @@ private struct PaneDropDelegate: DropDelegate {
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        guard model.draggedSession != target else {
+        let placement = PaneDrop(at: info.location, in: size)
+        guard changesLayout(placement) else {
             drop = nil
             return DropProposal(operation: .forbidden)
         }
-        drop = PaneDrop(at: info.location, in: size)
+        drop = placement
         return DropProposal(operation: .move)
     }
 
@@ -128,12 +129,19 @@ private struct PaneDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         let placement = PaneDrop(at: info.location, in: size)
         drop = nil
+        guard changesLayout(placement) else { return false }
         let providers = info.itemProviders(for: [SessionDrag.type])
         guard !providers.isEmpty else { return false }
         let target = target
         let model = model
         SessionDrag.load(providers) { id in model.place(id, at: placement, of: target) }
         return true
+    }
+
+    /// A drop that would leave the layout as it is gets no highlight and isn't accepted.
+    private func changesLayout(_ placement: PaneDrop) -> Bool {
+        guard let dragged = model.draggedSession else { return true }
+        return model.placementChangesLayout(dragged, at: placement, of: target)
     }
 }
 

@@ -369,9 +369,20 @@ final class AppModel {
 
     /// Puts a session beside a pane, or in its place; a session already on screen moves there.
     func place(_ id: UUID, at drop: PaneDrop, of target: UUID) {
-        guard id != target, let session = workspace.session(id), !session.isArchived, let layout = workspace.layout else { return }
-        update { $0.setLayout(layout.placing(id, at: drop, of: target), focus: id) }
+        guard let placed = layout(placing: id, at: drop, of: target) else { return }
+        update { $0.setLayout(placed, focus: id) }
         selectedID = id
+    }
+
+    /// Whether dropping a session there would move anything, such as a pane dropped on the side
+    /// of its neighbour it already holds.
+    func placementChangesLayout(_ id: UUID, at drop: PaneDrop, of target: UUID) -> Bool {
+        layout(placing: id, at: drop, of: target).map { $0 != workspace.layout } ?? false
+    }
+
+    private func layout(placing id: UUID, at drop: PaneDrop, of target: UUID) -> PaneLayout? {
+        guard id != target, let session = workspace.session(id), !session.isArchived, let layout = workspace.layout else { return nil }
+        return layout.placing(id, at: drop, of: target)
     }
 
     /// The group's live sessions as an even grid. The keyboard goes to `preferred`, else stays with
