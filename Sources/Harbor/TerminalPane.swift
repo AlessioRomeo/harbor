@@ -26,6 +26,8 @@ final class TerminalContainerView: NSView {
     var topInset: CGFloat = 0 {
         didSet { needsLayout = true }
     }
+    /// Off for read-only output, so keys like Return reach the window's buttons.
+    var takesFocus = true
     private var terminalView: TerminalView?
     private var handledFocusRequest: Int?
 
@@ -60,7 +62,7 @@ final class TerminalContainerView: NSView {
     }
 
     private func focusTerminal() {
-        guard let window, let terminalView else { return }
+        guard takesFocus, let window, let terminalView else { return }
         window.makeFirstResponder(terminalView)
     }
 

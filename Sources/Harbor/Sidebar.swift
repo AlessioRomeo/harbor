@@ -27,6 +27,9 @@ struct Sidebar: View {
                     GroupHeader(group: group)
                 }
             }
+            if !model.workspace.archivedSessions.isEmpty {
+                ArchiveSection()
+            }
         }
         .listStyle(.sidebar)
         .environment(\.defaultMinListRowHeight, 40)
@@ -126,6 +129,64 @@ private struct SessionMenu: View {
                 Button(group.name) { model.moveSession(session.id, to: group.id) }
                     .disabled(group.id == session.groupID)
             }
+        }
+        Divider()
+        Button("Archive") { model.requestArchive(session.id) }
+    }
+}
+
+/// Old sessions, out of the way but a click from coming back.
+private struct ArchiveSection: View {
+    @Environment(AppModel.self) private var model
+    @AppStorage("archiveExpanded") private var isExpanded = false
+    @State private var sessionToDelete: Session?
+
+    var body: some View {
+        Section(isExpanded: $isExpanded) {
+            ForEach(model.workspace.archivedSessions) { session in
+                HStack(spacing: 10) {
+                    Text(session.name)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    if let archivedAt = session.archivedAt {
+                        Text(archivedAt, format: .relative(presentation: .named, unitsStyle: .narrow))
+                            .font(.caption)
+                            .foregroundStyle(Theme.quietIndicator)
+                    }
+                }
+                .padding(.vertical, 5)
+                .tag(session.id)
+                .contextMenu {
+                    Button("Restore") { model.restore(session.id) }
+                    Divider()
+                    Button("Delete Permanently…") { sessionToDelete = session }
+                }
+            }
+        } header: {
+            HStack(spacing: 6) {
+                Image(systemName: "archivebox")
+                Text("Archived")
+                Text("\(model.workspace.archivedSessions.count)")
+                    .foregroundStyle(Theme.quietIndicator)
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.top, 10)
+        }
+        .onChange(of: model.selectedID, initial: true) { _, id in
+            if let id, model.workspace.session(id)?.isArchived == true {
+                isExpanded = true
+            }
+        }
+        .confirmationDialog(
+            "Delete “\(sessionToDelete?.name ?? "")” for good?",
+            isPresented: Binding(get: { sessionToDelete != nil }, set: { if !$0 { sessionToDelete = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let sessionToDelete { model.deletePermanently(sessionToDelete.id) }
+            }
+        } message: {
+            Text("Its name and saved output go too. This can't be undone.")
         }
     }
 }

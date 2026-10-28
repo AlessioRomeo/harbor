@@ -13,8 +13,6 @@ final class TerminalController: NSObject, TerminalViewDelegate {
         case lost(String)
     }
 
-    private static let scrollbackLines = 10_000
-
     let id: UUID
     @ObservationIgnored let view: TerminalView
     private(set) var connection = Connection.detached
@@ -22,24 +20,15 @@ final class TerminalController: NSObject, TerminalViewDelegate {
     @ObservationIgnored private(set) var layoutSize: TerminalSize?
     @ObservationIgnored var onLayout: (() -> Void)?
     @ObservationIgnored var onRestartRequest: (() -> Void)?
+    @ObservationIgnored var onInput: (() -> Void)?
     @ObservationIgnored private var hostConnection: HostConnection?
     @ObservationIgnored private var isReplaying = false
 
     init(id: UUID, fontSize: CGFloat) {
         self.id = id
-        view = TerminalView(
-            frame: NSRect(x: 0, y: 0, width: 800, height: 600),
-            font: Theme.terminalFont(size: fontSize),
-            options: TerminalOptions(scrollback: Self.scrollbackLines)
-        )
+        view = .harbor(fontSize: fontSize)
         super.init()
         view.terminalDelegate = self
-        view.optionAsMetaKey = false
-        view.nativeBackgroundColor = Theme.terminalBackground
-        view.nativeForegroundColor = Theme.terminalForeground
-        view.caretColor = Theme.caret
-        view.selectedTextBackgroundColor = Theme.selection
-        view.installColors(Theme.ansiColors)
     }
 
     func attach(socketPath: String) {
@@ -131,6 +120,7 @@ final class TerminalController: NSObject, TerminalViewDelegate {
 
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         guard !isReplaying else { return }
+        onInput?()
         if case .ended = connection {
             if data.contains(0x0D) {
                 onRestartRequest?()
@@ -159,4 +149,24 @@ final class TerminalController: NSObject, TerminalViewDelegate {
     func scrolled(source: TerminalView, position: Double) {}
 
     func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+}
+
+extension TerminalView {
+    private static let scrollbackLines = 10_000
+
+    /// A terminal view set up the way every Harbor terminal looks and behaves.
+    static func harbor(fontSize: CGFloat) -> TerminalView {
+        let view = TerminalView(
+            frame: NSRect(x: 0, y: 0, width: 800, height: 600),
+            font: Theme.terminalFont(size: fontSize),
+            options: TerminalOptions(scrollback: scrollbackLines)
+        )
+        view.optionAsMetaKey = false
+        view.nativeBackgroundColor = Theme.terminalBackground
+        view.nativeForegroundColor = Theme.terminalForeground
+        view.caretColor = Theme.caret
+        view.selectedTextBackgroundColor = Theme.selection
+        view.installColors(Theme.ansiColors)
+        return view
+    }
 }

@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         NavigationSplitView {
             Sidebar()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 360)
@@ -12,6 +13,23 @@ struct ContentView: View {
             DetailView()
         }
         .frame(minWidth: 720, minHeight: 420)
+        .focusedSceneValue(\.archivableSession, model.selectedController?.id)
+        .sheet(isPresented: $model.isSwitcherOpen) {
+            QuickSwitcher()
+        }
+        .confirmationDialog(
+            "Archive “\(model.archiveNeedingConfirmation.flatMap { model.workspace.session($0)?.name } ?? "")”?",
+            isPresented: Binding(
+                get: { model.archiveNeedingConfirmation != nil },
+                set: { if !$0 { model.archiveNeedingConfirmation = nil } }
+            )
+        ) {
+            Button("Archive") {
+                if let id = model.archiveNeedingConfirmation { model.archive(id) }
+            }
+        } message: {
+            Text("Something is still running in it. Archiving ends it; the output is kept.")
+        }
     }
 }
 
@@ -23,6 +41,8 @@ private struct DetailView: View {
             Color(nsColor: Theme.terminalBackground).ignoresSafeArea()
             if let error = model.storageError {
                 MessageView(title: "Harbor can't use its sessions file", message: error)
+            } else if let session = model.selectedID.flatMap({ model.workspace.session($0) }), session.isArchived {
+                ArchivedSessionView(session: session)
             } else if let controller = model.selectedController {
                 TerminalPane(controller: controller, focusRequest: model.editingID == nil ? model.terminalFocusRequest : nil, topInset: 22)
                     .ignoresSafeArea()

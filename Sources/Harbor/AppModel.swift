@@ -8,6 +8,9 @@ final class AppModel {
     private static let logger = Logger(subsystem: "com.alessioromeo.harbor", category: "workspace")
     private static let fontSizeKey = "terminalFontSize"
     private static let selectionKey = "selectedSessionID"
+    private static let autoArchiveKey = "autoArchiveDays"
+    static let autoArchiveChoices = [3, 7, 14, 0]
+    private static let activityResolution: TimeInterval = 60
     static let newSessionName = "New session"
 
     let host: HostClient
@@ -36,11 +39,22 @@ final class AppModel {
         }
     }
     private var pendingCreations: Set<UUID> = []
+    private var hasHandledSessions = false
     private(set) var claudeEvents: [UUID: ClaudeEvent] = [:]
     private let claudeStore: ClaudeEventStore
     private var claudeWatcher: DirectoryWatcher?
-    private var attentionIDs: Set<UUID> = []
+    private var attentionIDs: Set<UUID>?
     private let notifier = AttentionNotifier()
+    private var autoArchiveTimer: Timer?
+    /// A session waiting for me to confirm that archiving may end what runs in it.
+    var archiveNeedingConfirmation: UUID?
+    var isSwitcherOpen = false
+    var autoArchiveDays: Int {
+        didSet {
+            UserDefaults.standard.set(autoArchiveDays, forKey: Self.autoArchiveKey)
+            autoArchiveQuietSessions()
+        }
+    }
 
     init(paths: HarborPaths = .standard) {
         host = HostClient(paths: paths)
@@ -48,6 +62,7 @@ final class AppModel {
         claudeStore = ClaudeEventStore(directory: paths.claudeEvents)
         let stored = UserDefaults.standard.double(forKey: Self.fontSizeKey)
         fontSize = stored > 0 ? stored : Theme.defaultFontSize
+        autoArchiveDays = UserDefaults.standard.object(forKey: Self.autoArchiveKey) as? Int ?? 7
     }
 
     func start() {
@@ -56,6 +71,9 @@ final class AppModel {
         host.connect()
         if storageError == nil {
             startWatchingClaude()
+            autoArchiveTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.autoArchiveQuietSessions() }
+            }
         }
     }
 
@@ -104,6 +122,12 @@ final class AppModel {
 
     private func sessionsChanged() {
         guard storageError == nil else { return }
+        let isFirstList = !hasHandledSessions
+        hasHandledSessions = true
+        for (id, activity) in host.activities where activity == .busy {
+            noteActivity(id)
+        }
+        clearStaleClaudeEvents()
         for order in workspace.sessionsToKill(running: Set(host.activities.keys)) {
             host.send(.kill(id: order.id, saveOutput: order.saveOutput))
         }
@@ -114,6 +138,9 @@ final class AppModel {
             advance(controller)
         }
         refreshAttention()
+        if isFirstList {
+            autoArchiveQuietSessions()
+        }
     }
 
     /// A session is created at the size its view settled on, so the shell's first prompt fits;
@@ -130,6 +157,7 @@ final class AppModel {
     }
 
     func reconnect() {
+        hasHandledSessions = false
         for controller in controllers.values {
             controller.detach()
         }
@@ -154,6 +182,7 @@ final class AppModel {
             guard let self, let controller, let size = controller.layoutSize else { return }
             host.send(.create(id: controller.id, size: size))
         }
+        controller.onInput = { [weak self] in self?.noteActivity(id) }
         controllers[id] = controller
     }
 
@@ -196,7 +225,23 @@ final class AppModel {
 
     private func claudeEventsChanged() {
         claudeEvents = claudeStore.load()
+        for (id, event) in claudeEvents {
+            noteActivity(id, at: event.at)
+        }
         markSelectedSeen()
+    }
+
+    private func clearStaleClaudeEvents() {
+        let stale = ClaudeEvent.stale(claudeEvents, activities: host.activities, now: Date())
+        guard !stale.isEmpty else { return }
+        for id in stale {
+            do {
+                try claudeStore.remove(id)
+            } catch {
+                Self.logger.error("Could not clear Claude's report for \(id): \(String(describing: error))")
+            }
+        }
+        claudeEvents = claudeStore.load()
     }
 
     /// Looking at a session in the active app is what clears its attention.
@@ -208,11 +253,16 @@ final class AppModel {
         refreshAttention()
     }
 
+    /// Only sessions that start needing me while Harbor is in the background are announced;
+    /// what already needed me when Harbor opened just shows in the badge.
     private func refreshAttention() {
         let needing = Set(workspace.liveSessions.filter { indicator(of: $0.id).needsAttention }.map(\.id))
-        let fresh = needing.subtracting(attentionIDs)
+        let fresh = needing.subtracting(attentionIDs ?? [])
+        let isFirstCount = attentionIDs == nil
         attentionIDs = needing
         notifier.setBadge(needing.count)
+        guard !isFirstCount, !NSApp.isActive, !fresh.isEmpty else { return }
+        notifier.requestAttention()
         for id in fresh {
             guard let session = workspace.session(id), case .needsAttention(let reason) = indicator(of: id) else { continue }
             let body = switch reason {
@@ -273,6 +323,99 @@ final class AppModel {
         let ids = workspace.liveSessions(in: groupID).map(\.id)
         guard let source = offsets.first else { return }
         moveSession(ids[source], to: groupID, at: source < destination ? destination - 1 : destination)
+    }
+
+    // MARK: Archive
+
+    /// Saves at most once a minute per session; auto-archive counts in days.
+    private func noteActivity(_ id: UUID, at date: Date = Date()) {
+        guard let session = workspace.session(id), !session.isArchived,
+              date.timeIntervalSince(session.lastActivityAt) >= Self.activityResolution else { return }
+        update { $0.recordActivity(id, at: date) }
+    }
+
+    /// Archiving ends the shell, so a session with something running asks first.
+    func requestArchive(_ id: UUID) {
+        switch indicator(of: id) {
+        case .running, .claudeWorking, .claudeIdle, .needsAttention:
+            archiveNeedingConfirmation = id
+        case .notStarted, .idle, .ended:
+            archive(id)
+        }
+    }
+
+    func archive(_ id: UUID) {
+        archiveNeedingConfirmation = nil
+        guard let session = workspace.session(id), !session.isArchived else { return }
+        if selectedID == id {
+            selectedID = neighbour(of: session)
+        }
+        controllers.removeValue(forKey: id)?.detach()
+        pendingCreations.remove(id)
+        if host.activities[id] != nil {
+            host.send(.kill(id: id, saveOutput: true))
+        }
+        update { $0.archive(id, at: Date()) }
+        notifier.withdraw(sessionID: id)
+        refreshAttention()
+    }
+
+    func restore(_ id: UUID) {
+        update { $0.restore(id, at: Date()) }
+        controllers.removeValue(forKey: id)
+        selectedID = nil
+        selectedID = id
+    }
+
+    func deletePermanently(_ id: UUID) {
+        if selectedID == id {
+            selectedID = workspace.session(id).flatMap(neighbour(of:))
+        }
+        controllers.removeValue(forKey: id)?.detach()
+        if host.activities[id] != nil {
+            host.send(.kill(id: id, saveOutput: false))
+        }
+        update { $0.deleteSession(id) }
+        do {
+            let saved = host.paths.savedOutput(for: id)
+            if FileManager.default.fileExists(atPath: saved.path) {
+                try FileManager.default.removeItem(at: saved)
+            }
+            try claudeStore.remove(id)
+        } catch {
+            Self.logger.error("Could not remove the files of \(id): \(String(describing: error))")
+        }
+        refreshAttention()
+    }
+
+    /// The live session to show instead: the next one in the same group, else the previous, else any.
+    private func neighbour(of session: Session) -> UUID? {
+        let siblings = workspace.liveSessions(in: session.groupID).map(\.id)
+        if let index = siblings.firstIndex(of: session.id) {
+            let others = siblings.indices.filter { $0 != index }
+            if let next = others.first(where: { $0 > index }) ?? others.last {
+                return siblings[next]
+            }
+        }
+        return workspace.liveSessions.first { $0.id != session.id }?.id
+    }
+
+    func savedOutput(of id: UUID) -> Data? {
+        try? Data(contentsOf: host.paths.savedOutput(for: id))
+    }
+
+    private func autoArchiveQuietSessions() {
+        guard autoArchiveDays > 0, host.hasReceivedSessions, storageError == nil else { return }
+        let indicators = Dictionary(uniqueKeysWithValues: workspace.liveSessions.map { ($0.id, indicator(of: $0.id)) })
+        let quiet = workspace.sessionsToAutoArchive(
+            now: Date(),
+            idleInterval: TimeInterval(autoArchiveDays) * 24 * 3600,
+            indicators: indicators,
+            selected: selectedID
+        )
+        for id in quiet {
+            archive(id)
+        }
     }
 
     // MARK: Terminal

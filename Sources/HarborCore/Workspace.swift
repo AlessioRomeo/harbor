@@ -134,6 +134,46 @@ public struct Workspace: Codable, Equatable, Sendable {
         sessions[index].lastActivityAt = max(sessions[index].lastActivityAt, date)
     }
 
+    /// Archived sessions, most recently archived first.
+    public var archivedSessions: [Session] {
+        sessions.filter(\.isArchived).sorted { ($0.archivedAt ?? .distantPast) > ($1.archivedAt ?? .distantPast) }
+    }
+
+    public mutating func archive(_ id: UUID, at date: Date) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }), !sessions[index].isArchived else { return }
+        sessions[index].archivedAt = date
+    }
+
+    /// Brings a session back at the end of its group, or of the first group if its own is gone.
+    public mutating func restore(_ id: UUID, at date: Date) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }), sessions[index].isArchived else { return }
+        var session = sessions.remove(at: index)
+        if !groups.contains(where: { $0.id == session.groupID }) {
+            session.groupID = groups.first?.id ?? addGroup(named: Self.defaultGroupName)
+        }
+        session.archivedAt = nil
+        session.lastActivityAt = date
+        session.lastSeenAt = date
+        let lastInGroup = sessions.lastIndex { $0.groupID == session.groupID }
+        sessions.insert(session, at: lastInGroup.map { $0 + 1 } ?? sessions.endIndex)
+    }
+
+    public mutating func deleteSession(_ id: UUID) {
+        sessions.removeAll { $0.id == id }
+    }
+
+    /// Live sessions quiet for `idleInterval` that nothing holds open: no program running,
+    /// nothing waiting for me, and not the one on screen.
+    public func sessionsToAutoArchive(now: Date, idleInterval: TimeInterval, indicators: [UUID: SessionIndicator], selected: UUID?) -> [UUID] {
+        liveSessions.compactMap { session in
+            guard session.id != selected, now.timeIntervalSince(session.lastActivityAt) >= idleInterval else { return nil }
+            switch indicators[session.id] ?? .notStarted {
+            case .idle, .notStarted, .ended: return session.id
+            case .running, .claudeWorking, .claudeIdle, .needsAttention: return nil
+            }
+        }
+    }
+
     public mutating func markSeen(_ id: UUID, at date: Date) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[index].lastSeenAt = date
