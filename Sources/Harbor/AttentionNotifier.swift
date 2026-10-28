@@ -25,6 +25,11 @@ final class AttentionNotifier: NSObject, UNUserNotificationCenterDelegate {
         NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
     }
 
+    /// One Dock bounce: works even if notifications are off for Harbor.
+    func requestAttention() {
+        NSApp.requestUserAttention(.informationalRequest)
+    }
+
     func notify(sessionID: UUID, title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
@@ -59,7 +64,7 @@ final class AttentionNotifier: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        []
     }
 }
 

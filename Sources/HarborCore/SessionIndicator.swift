@@ -69,3 +69,16 @@ public enum SessionIndicator: Equatable, Sendable {
         }
     }
 }
+
+extension ClaudeEvent {
+    /// How long the host may take to report that a program took the terminal.
+    public static let hostReportDelay: TimeInterval = 2
+
+    /// Claude reports from sessions whose shell is back in front, so Claude is gone even if it
+    /// never said so. Reports newer than the host's delay may belong to a Claude just starting.
+    public static func stale(_ events: [UUID: ClaudeEvent], activities: [UUID: SessionActivity], now: Date) -> [UUID] {
+        events.compactMap { id, event in
+            activities[id] == .idle && now.timeIntervalSince(event.at) > hostReportDelay ? id : nil
+        }.sorted { $0.uuidString < $1.uuidString }
+    }
+}

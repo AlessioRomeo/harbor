@@ -48,6 +48,31 @@ struct SessionIndicatorTests {
     }
 }
 
+struct StaleClaudeEventTests {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    @Test func dropsReportsOnceTheShellIsBackInFront() {
+        let killed = UUID(), running = UUID(), starting = UUID(), ended = UUID()
+        let events = [
+            killed: ClaudeEvent(kind: .working, at: now.addingTimeInterval(-60)),
+            running: ClaudeEvent(kind: .working, at: now.addingTimeInterval(-60)),
+            starting: ClaudeEvent(kind: .working, at: now.addingTimeInterval(-1)),
+            ended: ClaudeEvent(kind: .finished, at: now.addingTimeInterval(-60)),
+        ]
+        let activities: [UUID: SessionActivity] = [killed: .idle, running: .busy, starting: .idle, ended: .ended(exitCode: 0)]
+        #expect(ClaudeEvent.stale(events, activities: activities, now: now) == [killed])
+    }
+
+    @Test func aLeftoverReportNoLongerCountsForTheNextProgram() {
+        let id = UUID()
+        var events = [id: ClaudeEvent(kind: .working, at: now.addingTimeInterval(-60))]
+        for stale in ClaudeEvent.stale(events, activities: [id: .idle], now: now) {
+            events[stale] = nil
+        }
+        #expect(SessionIndicator(host: .busy, claude: events[id], lastSeen: nil) == .running)
+    }
+}
+
 struct ClaudeEventStoreTests {
     @Test func readsOneEventPerSessionWithTheFileTime() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("claude-\(UUID().uuidString)")
