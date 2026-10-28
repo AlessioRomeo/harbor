@@ -52,7 +52,7 @@ struct HarborCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             Divider()
             Button("Go to Session…") { model.isSwitcherOpen = true }
-                .keyboardShortcut("p")
+                .keyboardShortcut("f")
         }
         CommandGroup(replacing: .saveItem) {
             Button(archivableSession == nil ? "Close Window" : "Archive Session") {
@@ -69,8 +69,8 @@ struct HarborCommands: Commands {
             Divider()
             Button("Clear to Start") { model.clearSelected() }
                 .keyboardShortcut("k")
-            Button("Find…") { showFindBar() }
-                .keyboardShortcut("f")
+            Button("Find in Terminal…") { showFindBar() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
         }
         CommandGroup(after: .toolbar) {
             Button("Bigger") { model.changeFontSize(by: 1) }

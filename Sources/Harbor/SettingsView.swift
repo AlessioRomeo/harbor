@@ -11,7 +11,7 @@ struct SettingsView: View {
                     Text(days == 0 ? "Never" : "\(days) days").tag(days)
                 }
             }
-            Text("Only sessions sitting at the prompt are archived. Their output is kept, and ⌘P still finds them.")
+            Text("Only sessions sitting at the prompt are archived. Their output is kept, and ⌘F still finds them.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

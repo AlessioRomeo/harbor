@@ -1,7 +1,7 @@
 import HarborCore
 import SwiftUI
 
-/// ⌘P: type part of a name, pick with the arrows and Return.
+/// ⌘F: type part of a name, pick with the arrows and Return.
 struct QuickSwitcher: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
